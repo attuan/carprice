@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# 巨大データ（GitHub は 100MB 超を拒否する）
+sampledata/vehicles.csv
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# 個人メモ（共有しない）
+CLAUDE.local.md

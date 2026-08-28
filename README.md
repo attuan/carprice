@@ -1,1 +1,9 @@
 # carprice
+株式会社INDXのインターンにて作成する中古車自動予測プログラムです。
+オートMLエージェントを構成し、AIによってモデル選択、予測、特長量選択を行えるようにするつもりです。
+# dialogsについて
+これまでの議論によって作られた議事録や、イメージをまとめてあるフォルダです。entrysheet.mdはこのインターンに参加するにあたって最初のアイデアがまとめられてあります。20260812中古車...はAI作成の議事録で、方針が端的にまとまってあります。unfold-landing.htmlは伊藤さんによるアイデアをまとめた設計書の一つになります。 
+# sampledataについて
+分析をかけるであろうデータになります。
+vehicles.csvはKaggleから拾ってきたものになります。https://www.kaggle.com/datasets/austinreese/craigslist-carstrucks-data
+usedsientaL.edit.omit.csvは2026年3月頃にカーセンサーからoctoparseでデータスクライビングしてきたものになります。日本語で書かれています。
