@@ -68,8 +68,55 @@ pandas で本番データを読むときも `nrows=` か `chunksize=` を必ず�
 
 ## 環境
 
-- Python 3.9.6（`/usr/bin/python3`、システム標準）
-- 仮想環境・依存管理はまだ未整備。整備したらこの節を更新すること
+Python 3.12.14（Homebrew）+ venv。**システムの `/usr/bin/python3`（3.9）は使わない。**
+
+```bash
+source .venv/bin/activate     # 有効化。以後 python / pip は venv のものになる
+```
+
+有効化せずに単発で動かす場合は `.venv/bin/python スクリプト.py` と直接叩く。
+依存は `requirements.txt`。追加したら `pip install -r requirements.txt` を再実行。
+
+未セットアップの環境での構築手順:
+
+```bash
+brew install python@3.12 libomp          # libomp は xgboost/lightgbm に必要
+/usr/local/opt/python@3.12/bin/python3.12 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+APIキーは `.env`（git管理外）に置く。雛形は `.env.example`。
+
+### 巨大データの扱い方
+
+`sampledata/raw/vehicles.csv` は 426,880行 / 1.4GB。
+
+実測値（このマシン: Intel i7-8850H / 16GB）:
+
+| 方法 | 全件集計の所要 | ピークメモリ |
+|---|---|---|
+| DuckDB（ファイルを直接SQL） | 1.3秒 | 0.22 GB |
+| pandas 全件読み込み | 55.9秒 | 6.80 GB |
+
+**探索・集計は DuckDB を使うこと。** 40倍速く、メモリは30分の1。
+pandas 全件読みは 6.8GB 使うので、16GB 機ではブラウザ等と併用すると苦しい。
+さらに `.copy()` や merge をすると倍近くまで膨らむので、
+pandas に渡すのは必要な列・行に絞り込んだ後にする。
+
+```python
+import duckdb
+duckdb.sql("SELECT manufacturer, count(*) FROM "
+           "read_csv_auto('sampledata/raw/vehicles.csv', ignore_errors=true) "
+           "GROUP BY 1 ORDER BY 2 DESC").show()
+```
+
+モデリングで部分集合を DataFrame にする段階になったら pandas に渡す。
+中間データは `sampledata/processed/` に **parquet** で保存する（CSVより小さく速い）。
+
+### 既知のデータ品質問題
+
+`vehicles.csv` の `price` は外れ値が激しい。平均 $75,199 に対し中央値 $13,950、
+最大は $3,736,928,711。**平均を使う前に必ず外れ値処理をすること。**
 
 ## ルール
 

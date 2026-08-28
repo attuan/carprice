@@ -1,0 +1,24 @@
+# データ処理
+pandas
+numpy
+pyarrow          # parquet 読み書き（processed/ の保存形式）
+duckdb           # 巨大CSVをメモリに載せずSQLで集計する
+
+# 可視化
+matplotlib
+seaborn
+
+# 機械学習
+scikit-learn
+xgboost
+lightgbm
+
+# LLM
+anthropic        # Claude API（LLMPredictor が呼ぶ先）
+python-dotenv    # APIキーを .env から読む
+
+# ユーティリティ
+kaggle           # scripts/download_data.py が使う
+tqdm             # 進捗バー
+jupyterlab       # 対話的な分析
+ipykernel

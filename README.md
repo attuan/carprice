@@ -5,16 +5,33 @@ AutoMLエージェントを構成し、AIによってモデル選択、予測、
 
 ## セットアップ
 
-このリポジトリには 1.4GB の生データを含めていません。clone 後に取得してください。
+### 1. Python環境
+
+Python 3.12 を使います（システム標準の 3.9 では動きません）。
 
 ```bash
-python3 scripts/download_data.py
+brew install python@3.12 libomp                        # libomp は xgboost/lightgbm に必要
+/usr/local/opt/python@3.12/bin/python3.12 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+source .venv/bin/activate
 ```
 
-（初回は `pip3 install kaggle` と Kaggle API トークンの設定が必要です。
-詳細は [scripts/download_data.py](scripts/download_data.py) の冒頭コメントを参照）
+### 2. データの取得
+
+このリポジトリには 1.4GB の生データを含めていません。
+
+```bash
+kaggle auth login              # 初回のみ（ブラウザで認証）
+python scripts/download_data.py
+```
 
 取得せずに動作確認だけしたい場合は `sampledata/sample/` の抜粋データが使えます。
+
+### 3. APIキー（LLMを使う段階になったら）
+
+```bash
+cp .env.example .env           # .env は git 管理外
+```
 
 ## dialogsについて
 

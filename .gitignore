@@ -12,10 +12,13 @@ sampledata/processed/*
 
 # sampledata/scraped/ と sampledata/sample/ は git 管理する（再取得できない / 小さい）
 
+# APIキー。絶対にコミットしないこと（.env.example が雛形）
+.env
+
 # Python
+.venv/
 __pycache__/
 *.pyc
-.venv/
 venv/
 .ipynb_checkpoints/
 
