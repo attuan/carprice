@@ -118,6 +118,22 @@ duckdb.sql("SELECT manufacturer, count(*) FROM "
 `vehicles.csv` の `price` は外れ値が激しい。平均 $75,199 に対し中央値 $13,950、
 最大は $3,736,928,711。**平均を使う前に必ず外れ値処理をすること。**
 
+## ノートブック
+
+`notebooks/` に連番で置く（`01_explore_vehicles.ipynb` など）。
+カーネルは必ず `.venv` のものを使う。ノートブック内では `!pip install` を使わず、
+`requirements.txt` に追記して `pip install -r requirements.txt` する。
+
+グラフに日本語を使う場合は先頭で以下を設定する（未設定だと豆腐□になる）:
+
+```python
+plt.rcParams["font.family"] = "Hiragino Sans"
+plt.rcParams["axes.unicode_minus"] = False
+```
+
+出力込みでコミットしている（結果を共有するため）。差分が読みにくくなってきたら
+`nbstripout` の導入を検討する。
+
 ## ルール
 
 - 説明は日本語で書く

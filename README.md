@@ -33,6 +33,20 @@ python scripts/download_data.py
 cp .env.example .env           # .env は git 管理外
 ```
 
+## 分析の始め方
+
+```bash
+source .venv/bin/activate
+jupyter lab                    # ブラウザで開く（Colab に近い操作感）
+```
+
+VS Code で `notebooks/01_explore_vehicles.ipynb` を直接開いても同じことができます。
+その場合は右上の「カーネルの選択」で `.venv` を選んでください。
+
+`notebooks/01_explore_vehicles.ipynb` が出発点です。
+上から順に実行すると、vehicles.csv の全体像の確認から
+`sampledata/processed/vehicles_clean.parquet`（380,907行）の生成までが一通り走ります。
+
 ## dialogsについて
 
 これまでの議論によって作られた議事録や、イメージをまとめてあるフォルダです。
