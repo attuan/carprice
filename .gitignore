@@ -1,8 +1,16 @@
 # macOS
 .DS_Store
 
-# 巨大データ（GitHub は 100MB 超を拒否する）
-sampledata/vehicles.csv
+# --- データ ---
+# raw/       : 外部から再取得できる巨大な生データ。scripts/download_data.py で取得する
+# processed/ : 分析途中の中間データ。コードから再生成できる
+# どちらも中身は git 管理しないが、ディレクトリ自体は残したいので .gitkeep だけ通す
+sampledata/raw/*
+!sampledata/raw/.gitkeep
+sampledata/processed/*
+!sampledata/processed/.gitkeep
+
+# sampledata/scraped/ と sampledata/sample/ は git 管理する（再取得できない / 小さい）
 
 # Python
 __pycache__/

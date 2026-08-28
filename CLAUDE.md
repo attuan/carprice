@@ -20,26 +20,50 @@ LLM を使った AutoML エージェントを構成し、特徴量生成・モ�
   - `entrysheet.md` — 最初の企画案
   - `2026...ミーティング.md` — 方針が端的にまとまっている。迷ったらまずここ
   - `unfold-landing.html` — 伊藤さんによる設計書
-- `sampledata/` — 分析対象データ
+- `scripts/` — データ取得などの補助スクリプト
+- `sampledata/` — データ。用途ごとに4つに分かれている（下記）
 
 ## データ
 
-### `sampledata/usedsientaL.edit.omit.csv`（204KB, 日本語）
+置き場所のルールはこの4つ。新しいデータを足すときは必ずどれかに分類する。
+
+| ディレクトリ | git管理 | 中身 |
+|---|---|---|
+| `sampledata/raw/` | ✕ | 外部から再取得できる巨大な生データ |
+| `sampledata/scraped/` | ○ | 自分たちで集めた、再取得できないデータ |
+| `sampledata/processed/` | ✕ | 分析途中の中間データ。コードで再生成できる |
+| `sampledata/sample/` | ○ | 動作確認用の小さな抜粋 |
+
+**判断基準は「再現できるか」。** 再取得・再生成できるものは git に入れず、
+手順（スクリプト）の方を git に入れる。git は全履歴を全員に配るので、
+一度でも巨大ファイルを入れると削除しても永久に残る。
+
+### `sampledata/scraped/usedsientaL.edit.omit.csv`（203KB, 日本語）
 
 2026年3月にカーセンサーから Octoparse でスクレイピングしたトヨタ シエンタのデータ。
 列: `index, 車両本体価格(万円), 走行距離(km), 車歴, 修復歴, 保証, ハイブリッド, 車検, 都道府県`
 数値列はすでにダミー変数化済み（0/1）。都道府県だけが文字列。
+**再取得できないので git 管理下に置いている。**
 
-### `sampledata/vehicles.csv`（1.4GB, 英語）
+### `sampledata/raw/vehicles.csv`（1.4GB, 英語, git管理外）
 
-Kaggle の Craigslist 中古車データ。 https://www.kaggle.com/datasets/austinreese/craigslist-carstrucks-data
-**巨大なので絶対に全体を読み込まないこと。** 中身を見るときは必ず先頭数行だけ:
+Kaggle の Craigslist 中古車データ。clone 直後は存在しないので、まず取得する:
 
 ```bash
-head -100 sampledata/vehicles.csv
+python3 scripts/download_data.py
 ```
 
-pandas で読むときも `nrows=` か `chunksize=` を必ず指定する。
+**巨大なので絶対に全体を読み込まないこと。** まずはサンプルで組み立てる:
+
+```bash
+head -20 sampledata/sample/vehicles_sample500.csv
+```
+
+`description` 列がフィールド内に改行を含むため、**`head` で行数を切ると
+CSV レコードが壊れる。** 抜粋を作るときは必ず csv パーサを使うこと
+（`sampledata/sample/vehicles_sample500.csv` はその方法で生成済み・500行）。
+
+pandas で本番データを読むときも `nrows=` か `chunksize=` を必ず指定する。
 欠損が多い（1行目から `year`, `manufacturer` などが空）ので、まず欠損率の確認から入る。
 
 ## 環境
@@ -51,4 +75,5 @@ pandas で読むときも `nrows=` か `chunksize=` を必ず指定する。
 
 - 説明は日本語で書く
 - 巨大ファイル（100MB 超）を git にコミットしない。`.gitignore` を確認してから `git add` する
+- 生成した中間ファイルは `sampledata/processed/` に置く（git 管理外）
 - コミットメッセージは日本語で可
