@@ -138,5 +138,8 @@ plt.rcParams["axes.unicode_minus"] = False
 
 - 説明は日本語で書く
 - 巨大ファイル（100MB 超）を git にコミットしない。`.gitignore` を確認してから `git add` する
+  - このルールは `.claude/hooks/block_large_git_add.py` が機械的に強制している。
+    `git add` / `git commit` の直前にサイズを検査し、100MB 以上は拒否、25MB 以上は確認を求める。
+    閾値は環境変数 `CARPRICE_GIT_DENY_MB` / `CARPRICE_GIT_ASK_MB` で変えられる。
 - 生成した中間ファイルは `sampledata/processed/` に置く（git 管理外）
 - コミットメッセージは日本語で可
