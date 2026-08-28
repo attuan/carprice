@@ -24,3 +24,6 @@ venv/
 
 # 個人メモ（共有しない）
 CLAUDE.local.md
+
+# Excel の一時ロックファイル
+~$*
