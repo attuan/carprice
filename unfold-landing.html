@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>unfold — machine learning for unstructured data</title>
+<meta name="description" content="Build features from images, text, and documents. Combine embeddings, gradient boosting, and LLM reasoning behind a familiar fit() / predict() interface.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   tokens
+   ============================================================ */
+:root{
+  --paper:#FFFFFF;
+  --panel:#F7F8F6;
+  --panel-2:#F1F3EF;
+  --ink:#0F1317;
+  --ink-2:#39414A;
+  --mute:#767E86;
+  --rule:#E3E5E1;
+  --rule-2:#EFF0ED;
+
+  /* provenance palette — these three colors mean something */
+  --human:#2B4C8C;   --human-bg:#EAEFF8;
+  --model:#0B6E5C;   --model-bg:#E6F2EE;
+  --llm:#8A5A05;     --llm-bg:#F9EFDC;
+
+  --shadow:0 1px 2px rgba(15,19,23,.04), 0 8px 24px -12px rgba(15,19,23,.10);
+  --mono:'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans:'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --disp:'Bricolage Grotesque', var(--sans);
+  --maxw:1180px;
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:var(--sans); font-size:16px; line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:inherit}
+::selection{background:#D9F0E8}
+
+.wrap{max-width:var(--maxw); margin:0 auto; padding:0 28px}
+@media(max-width:640px){ .wrap{padding:0 18px} }
+
+h1,h2,h3{font-family:var(--disp); font-weight:600; letter-spacing:-.03em; line-height:1.03; margin:0}
+h1{font-size:clamp(2.5rem,6.4vw,4.5rem)}
+h2{font-size:clamp(1.9rem,3.7vw,2.9rem)}
+h3{font-size:1.06rem; letter-spacing:-.015em; line-height:1.25}
+p{margin:0}
+
+.lede{font-size:clamp(1.02rem,1.4vw,1.18rem); color:var(--ink-2); line-height:1.6; max-width:60ch}
+.sub{color:var(--mute); font-size:.95rem; line-height:1.6; max-width:62ch}
+
+.eyebrow{
+  font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--mute); font-weight:500;
+}
+code,kbd,pre{font-family:var(--mono)}
+.mono,pre,code,kbd,table.df,.term,.badge,.chip,.stat .v{font-variant-ligatures:none}
+
+/* ============================================================
+   nav
+   ============================================================ */
+.nav{
+  position:sticky; top:0; z-index:60; background:rgba(255,255,255,.86);
+  backdrop-filter:saturate(1.4) blur(10px); border-bottom:1px solid var(--rule);
+}
+.nav-in{display:flex; align-items:center; gap:26px; height:58px}
+.brand{display:flex; align-items:center; gap:9px; font-family:var(--mono); font-weight:700; font-size:15px; letter-spacing:-.02em; text-decoration:none}
+.mark{width:16px;height:16px;flex:none}
+.nav-links{display:flex; gap:22px; margin-left:auto; align-items:center}
+.nav-links a{font-size:13.5px; color:var(--ink-2); text-decoration:none}
+.nav-links a:hover{color:var(--ink)}
+.nav-ver{font-family:var(--mono); font-size:11.5px; color:var(--mute); border:1px solid var(--rule); border-radius:100px; padding:2px 8px}
+@media(max-width:860px){ .nav-links a:not(.btn-sm){display:none} }
+
+.btn{
+  display:inline-flex; align-items:center; gap:8px; height:44px; padding:0 20px;
+  border-radius:8px; font-size:14.5px; font-weight:500; text-decoration:none;
+  border:1px solid var(--ink); background:var(--ink); color:#fff; cursor:pointer;
+  transition:transform .15s ease, background .15s ease;
+}
+.btn:hover{background:#252C33; transform:translateY(-1px)}
+.btn.ghost{background:transparent; color:var(--ink); border-color:var(--rule)}
+.btn.ghost:hover{background:var(--panel); border-color:#CFD3CD}
+.btn-sm{height:32px; padding:0 13px; font-size:13px; border-radius:7px}
+
+/* ============================================================
+   pipeline rail + bands
+   ============================================================ */
+.band{padding:104px 0; border-top:1px solid var(--rule); position:relative}
+.band:first-of-type{border-top:0}
+@media(max-width:760px){ .band{padding:68px 0} }
+
+.rail{
+  position:fixed; left:26px; top:0; height:100vh; width:150px; z-index:40;
+  display:none; flex-direction:column; justify-content:center; gap:0; pointer-events:none;
+}
+@media(min-width:1440px){ .rail{display:flex} }
+.rail-item{
+  display:flex; align-items:center; gap:10px; padding:5px 0;
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
+  color:#B9BEB9; transition:color .3s ease;
+}
+.rail-dot{width:5px;height:5px;border-radius:50%;background:#D7DAD6;transition:all .3s ease;flex:none}
+.rail-item.on{color:var(--ink)}
+.rail-item.on .rail-dot{background:var(--model); box-shadow:0 0 0 3px var(--model-bg)}
+
+.sec-label{display:flex; align-items:baseline; gap:12px; margin-bottom:20px}
+.sec-label .bar{width:22px;height:1px;background:var(--ink);position:relative;top:-4px}
+
+/* ============================================================
+   hero
+   ============================================================ */
+.hero{padding:76px 0 84px}
+@media(max-width:760px){ .hero{padding:48px 0 56px} }
+.hero h1{margin:18px 0 22px; max-width:15ch}
+.hero h1 em{font-style:normal; color:var(--mute)}
+.hero-cta{display:flex; gap:12px; margin:32px 0 0; flex-wrap:wrap; align-items:center}
+
+.install{
+  display:inline-flex; align-items:center; gap:12px; height:44px; padding:0 6px 0 16px;
+  border:1px solid var(--rule); border-radius:8px; background:var(--panel);
+  font-family:var(--mono); font-size:14px; color:var(--ink-2);
+}
+.install b{color:var(--ink); font-weight:500}
+.copy{
+  border:0; background:transparent; cursor:pointer; height:32px; width:34px; border-radius:6px;
+  display:grid; place-items:center; color:var(--mute);
+}
+.copy:hover{background:#E7E9E5; color:var(--ink)}
+.copy.done{color:var(--model)}
+
+.hero-grid{display:grid; grid-template-columns:1fr 1fr; gap:56px; align-items:start}
+@media(max-width:960px){ .hero-grid{grid-template-columns:1fr; gap:36px} }
+
+/* ============================================================
+   code panels
+   ============================================================ */
+.code{
+  background:var(--paper); border:1px solid var(--rule); border-radius:12px; overflow:hidden;
+  box-shadow:var(--shadow);
+}
+.code-bar{
+  display:flex; align-items:center; gap:10px; padding:9px 14px; border-bottom:1px solid var(--rule-2);
+  background:var(--panel); font-family:var(--mono); font-size:11.5px; color:var(--mute);
+}
+.code-bar .fname{color:var(--ink-2)}
+.code-bar .tag{margin-left:auto}
+pre.src{margin:0; padding:20px 18px; font-size:13.2px; line-height:1.72; overflow-x:auto; color:var(--ink)}
+@media(max-width:520px){ pre.src{font-size:12.1px; padding:16px 14px} }
+.k{color:var(--ink); font-weight:700}
+.cl{color:var(--human)}
+.s{color:var(--llm)}
+.n{color:var(--model)}
+.c{color:#9AA1A6; font-style:italic}
+.p{color:#8D959B}
+
+/* ============================================================
+   dataframe (signature)
+   ============================================================ */
+.df-head{display:flex; align-items:flex-end; gap:18px; flex-wrap:wrap; margin-bottom:22px}
+.seg{display:inline-flex; padding:3px; background:var(--panel); border:1px solid var(--rule); border-radius:9px; gap:3px}
+.seg button{
+  border:0; background:transparent; cursor:pointer; font-family:var(--mono); font-size:12px;
+  padding:7px 13px; border-radius:6px; color:var(--mute); white-space:nowrap;
+}
+.seg button[aria-pressed="true"]{background:var(--paper); color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,.07)}
+
+.df-layout{display:grid; grid-template-columns:minmax(0,1fr) 306px; gap:20px; align-items:start}
+@media(max-width:1080px){ .df-layout{grid-template-columns:1fr} }
+
+.df-shell{border:1px solid var(--rule); border-radius:12px; background:var(--paper); overflow:hidden; box-shadow:var(--shadow)}
+.df-scroll{overflow-x:auto}
+table.df{border-collapse:collapse; width:100%; font-size:13px; min-width:660px}
+table.df th{
+  text-align:left; padding:11px 14px; border-bottom:1px solid var(--rule);
+  background:var(--panel); font-weight:500; vertical-align:top; white-space:nowrap;
+}
+table.df th .cn{font-family:var(--mono); font-size:12.5px; color:var(--ink); display:block}
+table.df th .dt{font-family:var(--mono); font-size:10px; color:var(--mute); letter-spacing:.04em}
+table.df td{
+  padding:10px 14px; border-bottom:1px solid var(--rule-2); vertical-align:middle;
+  color:var(--ink-2); white-space:nowrap; max-width:240px; overflow:hidden; text-overflow:ellipsis;
+}
+table.df tr:last-child td{border-bottom:0}
+table.df tbody tr:hover td{background:#FBFCFA}
+td.idx{font-family:var(--mono); color:#B7BCB7; font-size:11.5px; width:38px; padding-right:0}
+td.num{font-family:var(--mono); color:var(--ink)}
+td.txt{color:var(--mute); font-size:12.5px}
+td.raw-ref{font-family:var(--mono); font-size:12px; color:var(--human)}
+
+.cell{
+  display:inline-flex; align-items:center; gap:7px; border:0; background:transparent;
+  font:inherit; color:inherit; cursor:pointer; padding:3px 7px; margin:-3px -7px;
+  border-radius:6px; max-width:100%;
+}
+.cell:hover{background:var(--panel-2)}
+.cell[aria-selected="true"]{background:var(--ink); color:#fff}
+.cell[aria-selected="true"] .dot{box-shadow:0 0 0 2px rgba(255,255,255,.28)}
+.dot{width:7px;height:7px;border-radius:50%;flex:none}
+.dot.human{background:var(--human)} .dot.model{background:var(--model)} .dot.llm{background:var(--llm)}
+.val{font-family:var(--mono); font-size:12.5px; overflow:hidden; text-overflow:ellipsis}
+
+.legend{display:flex; gap:16px; flex-wrap:wrap; align-items:center; padding:11px 14px; border-top:1px solid var(--rule); background:var(--panel); font-family:var(--mono); font-size:11px; color:var(--mute)}
+.legend span{display:inline-flex; align-items:center; gap:6px}
+.legend .grow{margin-left:auto}
+
+/* provenance card */
+.prov{border:1px solid var(--rule); border-radius:12px; background:var(--panel); padding:16px; position:sticky; top:78px}
+.prov .empty{color:var(--mute); font-size:13px; line-height:1.5}
+.prov h4{margin:0 0 2px; font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--mute); font-weight:500}
+.prov .big{font-family:var(--disp); font-size:1.7rem; letter-spacing:-.03em; margin:6px 0 2px}
+.kv{display:flex; justify-content:space-between; gap:14px; padding:7px 0; border-top:1px solid var(--rule); font-family:var(--mono); font-size:11.5px}
+.kv dt{color:var(--mute)} .kv dd{margin:0; color:var(--ink); text-align:right; overflow:hidden; text-overflow:ellipsis}
+.chip{display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:10.5px; padding:3px 8px; border-radius:100px; letter-spacing:.03em}
+.chip.human{background:var(--human-bg); color:var(--human)}
+.chip.model{background:var(--model-bg); color:var(--model)}
+.chip.llm{background:var(--llm-bg); color:var(--llm)}
+.meter{height:4px; background:#E3E6E2; border-radius:100px; overflow:hidden; margin-top:9px}
+.meter i{display:block; height:100%; background:var(--ink); border-radius:100px}
+
+/* ============================================================
+   generic two-col
+   ============================================================ */
+.two{display:grid; grid-template-columns:1fr 1fr; gap:52px; align-items:start}
+@media(max-width:960px){ .two{grid-template-columns:1fr; gap:34px} }
+.stack{display:flex; flex-direction:column; gap:18px}
+
+.flow{border:1px solid var(--rule); border-radius:12px; padding:22px; background:var(--panel)}
+.flow-step{display:flex; align-items:center; gap:12px; font-family:var(--mono); font-size:12.5px; color:var(--ink)}
+.flow-step .n2{width:22px; color:var(--mute); font-size:11px}
+.flow-arrow{height:16px; margin-left:11px; border-left:1px dashed #C9CEC9}
+.flow-note{font-family:var(--mono); font-size:11px; color:var(--mute); margin-left:34px}
+
+/* cards / gallery */
+.gt-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:12px}
+@media(max-width:760px){ .gt-grid{grid-template-columns:repeat(2,1fr)} }
+.gt-card{border:1px solid var(--rule); border-radius:10px; padding:10px; background:var(--paper); text-align:center}
+.gt-card svg{width:100%; height:auto; display:block}
+.gt-card .lab{display:flex; align-items:center; justify-content:center; gap:6px; margin-top:6px; font-family:var(--mono); font-size:11px; color:var(--ink)}
+
+.query-box{border:1px solid var(--ink); border-radius:12px; padding:16px; background:var(--paper); box-shadow:var(--shadow)}
+.nbr{display:grid; grid-template-columns:44px 62px 1fr 40px; align-items:center; gap:10px; padding:7px 0; font-family:var(--mono); font-size:12px; border-bottom:1px solid var(--rule-2)}
+.nbr:last-child{border-bottom:0}
+.nbr .rid{color:var(--mute); font-size:11.5px}
+.nbr .bar{height:5px; background:#E7E9E5; border-radius:100px; overflow:hidden}
+.nbr .bar i{display:block; height:100%; background:var(--model); border-radius:100px; transition:width .5s cubic-bezier(.2,.7,.2,1)}
+.nbr.dim .bar i{background:#C3C8C3}
+.nbr .sim{text-align:right; color:var(--ink)}
+.nbr .lab{color:var(--ink-2)}
+.verdict{margin-top:14px; border-top:1px solid var(--rule); padding-top:14px}
+
+/* threshold lab */
+.lab-panel{border:1px solid var(--rule); border-radius:12px; background:var(--paper); box-shadow:var(--shadow); overflow:hidden}
+.lab-body{padding:22px}
+.route-bar{display:flex; height:38px; border-radius:8px; overflow:hidden; border:1px solid var(--rule); background:var(--panel)}
+.route-bar div{display:grid; place-items:center; font-family:var(--mono); font-size:11px; transition:width .45s cubic-bezier(.2,.7,.2,1); overflow:hidden; white-space:nowrap}
+.route-fast{background:var(--model-bg); color:var(--model)}
+.route-llm{background:var(--llm-bg); color:var(--llm)}
+input[type=range]{-webkit-appearance:none; appearance:none; width:100%; background:transparent; margin:16px 0 4px; cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:2px; background:#D8DCD8; border-radius:2px}
+input[type=range]::-moz-range-track{height:2px; background:#D8DCD8; border-radius:2px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:var(--ink); margin-top:-8px; border:3px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.25)}
+input[type=range]::-moz-range-thumb{width:14px; height:14px; border-radius:50%; background:var(--ink); border:3px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.25)}
+input[type=range]:focus-visible{outline:2px solid var(--model); outline-offset:6px; border-radius:4px}
+.stats{display:grid; grid-template-columns:repeat(4,1fr); border-top:1px solid var(--rule)}
+@media(max-width:640px){ .stats{grid-template-columns:repeat(2,1fr)} }
+.stat{padding:14px 16px; border-right:1px solid var(--rule)}
+.stat:last-child{border-right:0}
+@media(max-width:640px){ .stat:nth-child(2){border-right:0} .stat:nth-child(-n+2){border-bottom:1px solid var(--rule)} }
+.stat .v{font-family:var(--mono); font-size:1.15rem; letter-spacing:-.02em; color:var(--ink)}
+.stat .l{font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--mute); margin-top:2px}
+
+/* evidence funnel */
+.funnel .ev-list{display:flex; flex-direction:column; gap:8px}
+.funnel .merge{position:relative}
+.funnel .merge::before{content:""; position:absolute; inset:0; pointer-events:none}
+.ev-list{display:flex; flex-direction:column; gap:8px}
+.ev-row{
+  display:grid; grid-template-columns:1fr 52px; gap:10px; align-items:center;
+  border:1px solid var(--rule); border-radius:9px; padding:10px 13px; background:var(--paper);
+}
+.ev-row .nm{font-family:var(--mono); font-size:12.5px}
+.ev-row .nm small{display:block; color:var(--mute); font-size:10.5px; letter-spacing:.02em}
+.ev-row .vv{font-family:var(--mono); font-size:13px; text-align:right; color:var(--model)}
+.bracket{position:relative}
+.bracket::before{content:""; position:absolute; left:0; top:22px; bottom:22px; border-left:1px solid #C9CEC9}
+.bracket i{position:absolute; left:0; width:14px; border-top:1px solid #C9CEC9}
+.merge{display:flex; flex-direction:column; align-items:center; gap:0}
+.vline{width:1px; height:30px; background:#C9CEC9; position:relative; display:block}
+.vline::after{
+  content:""; position:absolute; bottom:0; left:-3.5px;
+  border-left:4px solid transparent; border-right:4px solid transparent; border-top:5px solid #C9CEC9;
+}
+.node{
+  border:1px solid var(--ink); border-radius:10px; padding:12px 18px; background:var(--paper);
+  font-family:var(--mono); font-size:12.5px; text-align:center; box-shadow:var(--shadow);
+}
+.out{
+  display:inline-flex; flex-direction:column; align-items:center; border:1px solid var(--rule);
+  background:var(--panel); border-radius:10px; padding:10px 22px;
+}
+.out b{font-family:var(--disp); font-size:2rem; letter-spacing:-.03em; font-weight:600}
+.out span{font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--mute)}
+
+/* provider grid */
+.prov-row{display:grid; grid-template-columns:170px 1fr; gap:20px; align-items:center; padding:20px 0; border-top:1px solid var(--rule)}
+@media(max-width:640px){ .prov-row{grid-template-columns:1fr; gap:12px; padding:16px 0} }
+.prov-row .rl{font-family:var(--mono); font-size:12px; color:var(--ink)}
+.prov-row .rl small{display:block; color:var(--mute); font-size:11px; margin-top:2px}
+.badges{display:flex; flex-wrap:wrap; gap:8px}
+.badge{
+  border:1px solid var(--rule); border-radius:7px; padding:7px 12px; background:var(--paper);
+  font-family:var(--mono); font-size:12px; color:var(--ink-2); transition:all .18s ease;
+}
+.badge:hover{border-color:#BFC5BF; color:var(--ink); transform:translateY(-1px)}
+.badge.custom{border-style:dashed; color:var(--mute)}
+
+/* terminal */
+.term{
+  white-space:pre; margin:0;
+  background:#0F1317; border-radius:12px; padding:22px 20px; color:#D6DBDF;
+  font-family:var(--mono); font-size:12.6px; line-height:1.85; overflow-x:auto;
+}
+@media(max-width:520px){ .term{font-size:11.4px; padding:16px 14px} }
+.term .hd{color:#6C757D}
+.term .g{color:#57C4A3} .term .y{color:#E0A85E} .term .b{color:#7FA8E8} .term .w{color:#FFF}
+.term hr{border:0; border-top:1px solid #262E36; margin:3px 0}
+
+/* closing */
+.close{padding:104px 0 40px; text-align:center; border-top:1px solid var(--rule)}
+.close h2{max-width:34ch; margin:0 auto 20px}
+.foot{border-top:1px solid var(--rule); padding:24px 0 40px; display:flex; gap:18px; flex-wrap:wrap; align-items:center; font-family:var(--mono); font-size:11.5px; color:var(--mute)}
+.foot a{text-decoration:none} .foot a:hover{color:var(--ink)}
+.foot .grow{margin-left:auto}
+
+/* reveal */
+.rv{opacity:0; transform:translateY(14px); transition:opacity .7s ease, transform .7s cubic-bezier(.2,.7,.2,1)}
+.rv.in{opacity:1; transform:none}
+@media (prefers-reduced-motion:reduce){
+  .rv{opacity:1; transform:none; transition:none}
+  *{animation-duration:.001ms !important; transition-duration:.001ms !important}
+}
+:focus-visible{outline:2px solid var(--model); outline-offset:3px; border-radius:4px}
+</style>
+</head>
+<body>
+
+<!-- ===================== nav ===================== -->
+<nav class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="#top">
+      <svg class="mark" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <rect x="1" y="1" width="6" height="6" rx="1.4" fill="#0F1317"/>
+        <rect x="9" y="1" width="6" height="6" rx="1.4" fill="#0B6E5C"/>
+        <rect x="1" y="9" width="6" height="6" rx="1.4" fill="#8A5A05"/>
+        <rect x="9" y="9" width="6" height="6" rx="1.4" fill="#D5D9D5"/>
+      </svg>
+      unfold
+    </a>
+    <span class="nav-ver">v0.4.2</span>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#routing">Routing</a>
+      <a href="#predict">LLM Predict</a>
+      <a href="#api">API</a>
+      <a class="btn ghost btn-sm" href="#get-started">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ===================== pipeline rail ===================== -->
+<aside class="rail" aria-hidden="true">
+  <div class="rail-item" data-rail="data"><span class="rail-dot"></span>data</div>
+  <div class="rail-item" data-rail="features"><span class="rail-dot"></span>features</div>
+  <div class="rail-item" data-rail="ground-truth"><span class="rail-dot"></span>ground truth</div>
+  <div class="rail-item" data-rail="routing"><span class="rail-dot"></span>routing</div>
+  <div class="rail-item" data-rail="predict"><span class="rail-dot"></span>prediction</div>
+  <div class="rail-item" data-rail="api"><span class="rail-dot"></span>api</div>
+  <div class="rail-item" data-rail="providers"><span class="rail-dot"></span>providers</div>
+  <div class="rail-item" data-rail="inspect"><span class="rail-dot"></span>inspect</div>
+</aside>
+
+<main id="top">
+
+<!-- ===================== hero ===================== -->
+<section class="hero" data-sec="data">
+  <div class="wrap">
+    <div class="hero-grid">
+      <div>
+        <p class="eyebrow rv">Python · MIT · pip install unfold</p>
+        <h1 class="rv">Machine learning for <em>unstructured</em> data.</h1>
+        <p class="lede rv">Build features from images, text, and documents. Combine embeddings, gradient boosting, and LLM reasoning behind the <code>fit()</code> / <code>predict()</code> interface you already know.</p>
+        <div class="hero-cta rv">
+          <a class="btn" href="#get-started">Get started</a>
+          <a class="btn ghost" href="#get-started">View on GitHub</a>
+        </div>
+        <div class="hero-cta rv" style="margin-top:16px">
+          <div class="install">
+            <span class="p">$</span> <b>pip install unfold</b>
+            <button class="copy" id="copyBtn" aria-label="Copy install command">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 3.5v-1h-8v8h1"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="code rv">
+        <div class="code-bar"><span class="fname">predict_resale.py</span><span class="tag">python 3.11</span></div>
+<pre class="src"><span class="k">from</span> unfold <span class="k">import</span> <span class="cl">Feature</span>, <span class="cl">LLMPredictor</span>
+
+<span class="c"># any column becomes a feature</span>
+df[<span class="s">"vehicle_type"</span>] <span class="p">=</span> <span class="cl">Feature</span>(
+    source<span class="p">=</span><span class="s">"image"</span>,
+    values<span class="p">=</span>[<span class="s">"sedan"</span>, <span class="s">"suv"</span>, <span class="s">"truck"</span>, <span class="s">"van"</span>],
+).fit_transform(df)
+
+<span class="c"># models produce evidence, the LLM reasons over it</span>
+model <span class="p">=</span> <span class="cl">LLMPredictor</span>(
+    target<span class="p">=</span><span class="s">"resale_band"</span>,
+    models<span class="p">=</span>[xgb, semantic_knn],
+    examples<span class="p">=</span><span class="s">"semantic"</span>,
+)
+model.fit(df, y)
+model.predict(new_cars)</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== dataframe ===================== -->
+<section class="band" id="dataframe" data-sec="features">
+  <div class="wrap">
+    <div class="sec-label"><span class="bar"></span><span class="eyebrow">One DataFrame, any data</span></div>
+    <div class="df-head">
+      <div style="flex:1 1 380px">
+        <h2 class="rv">Turn unstructured columns into ML-ready features.</h2>
+        <p class="sub rv" style="margin-top:14px">Photos, listings, and free-form comments go in. Typed, inspectable columns come out — each one carrying the record of how it was produced.</p>
+      </div>
+      <div class="seg rv" role="group" aria-label="DataFrame view">
+        <button id="tabRaw" aria-pressed="true">raw columns</button>
+        <button id="tabFeat" aria-pressed="false">derived features</button>
+      </div>
+    </div>
+
+    <div class="df-layout rv">
+      <div class="df-shell">
+        <div class="df-scroll"><table class="df" id="dfTable"><thead id="dfHead"></thead><tbody id="dfBody"></tbody></table></div>
+        <div class="legend" id="dfLegend">
+          <span><i class="dot human"></i> human label</span>
+          <span><i class="dot model"></i> embedding classifier</span>
+          <span><i class="dot llm"></i> LLM fallback</span>
+          <span class="grow" id="dfCount">6 of 2,480 rows</span>
+        </div>
+      </div>
+
+      <div class="prov" id="provCard">
+        <p class="empty">Select any derived cell to see how it was produced — source column, model, confidence, and the labeled examples it was matched against.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== feature engineering ===================== -->
+<section class="band" id="features" data-sec="features">
+  <div class="wrap">
+    <div class="sec-label"><span class="bar"></span><span class="eyebrow">Capability A — feature engineering</span></div>
+    <div class="two">
+      <div class="stack">
+        <h2 class="rv">Any column can become a feature.</h2>
+        <p class="sub rv">Declare the source column, the output type, and the values you want. <code>unfold</code> handles embedding, retrieval, classification, and escalation — and caches everything so you only pay for a row once.</p>
+        <div class="code rv">
+          <div class="code-bar"><span class="fname">features.py</span></div>
+<pre class="src">df[<span class="s">"sentiment"</span>] <span class="p">=</span> <span class="cl">Feature</span>(
+    source<span class="p">=</span><span class="s">"customer_comment"</span>,
+    type<span class="p">=</span><span class="s">"category"</span>,
+    values<span class="p">=</span>[<span class="s">"positive"</span>, <span class="s">"neutral"</span>, <span class="s">"negative"</span>],
+).fit_transform(df)
+
+df[<span class="s">"luxury_score"</span>] <span class="p">=</span> <span class="cl">Feature</span>(
+    source<span class="p">=</span>[<span class="s">"image"</span>, <span class="s">"description"</span>],
+    type<span class="p">=</span><span class="s">"float"</span>, range<span class="p">=</span>(<span class="n">0</span>, <span class="n">1</span>),
+).fit_transform(df)
+
+<span class="c"># binary · category · int · float · ordinal</span>
+<span class="c"># multilabel · embedding</span></pre>
+        </div>
+      </div>
+
+      <div class="stack">
+        <div class="flow rv">
+          <p class="eyebrow" style="margin-bottom:16px">What runs per row</p>
+          <div class="flow-step"><span class="n2">01</span> Ground truth</div>
+          <div class="flow-note">200 labeled examples you already have</div>
+          <div class="flow-arrow"></div>
+          <div class="flow-step"><span class="n2">02</span> Multimodal embedding</div>
+          <div class="flow-note">cached · one vector per record</div>
+          <div class="flow-arrow"></div>
+          <div class="flow-step"><span class="n2">03</span> Nearest labeled examples</div>
+          <div class="flow-note">similarity + label agreement → confidence</div>
+          <div class="flow-arrow"></div>
+          <div class="flow-step"><span class="n2">04</span> Confident? Return the label.</div>
+          <div class="flow-note">no LLM call · ~18&thinsp;ms · $0.0000</div>
+          <div class="flow-arrow"></div>
+          <div class="flow-step"><span class="n2">05</span> Uncertain? Escalate to the LLM.</div>
+          <div class="flow-note">the answer is written back as a new candidate label</div>
+        </div>
+        <div class="code rv">
+          <div class="code-bar"><span class="fname">adaptive.py</span><span class="tag">the whole idea, in five lines</span></div>
+<pre class="src">vehicle_type <span class="p">=</span> <span class="cl">SemanticFeature</span>(
+    input<span class="p">=</span><span class="s">"image"</span>,
+    labels<span class="p">=</span>[<span class="s">"sedan"</span>, <span class="s">"suv"</span>, <span class="s">"truck"</span>, <span class="s">"van"</span>],
+    strategy<span class="p">=</span><span class="s">"adaptive"</span>,
+    fallback<span class="p">=</span><span class="s">"llm"</span>,
+)</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== ground truth ===================== -->
+<section class="band" id="ground-truth" data-sec="ground-truth">
+  <div class="wrap">
+    <div class="sec-label"><span class="bar"></span><span class="eyebrow">Learn from ground truth</span></div>
+    <div class="two">
+      <div class="stack">
+        <h2 class="rv">Your labels are the model.</h2>
+        <p class="sub rv">Every labeled record becomes a reference point. A new record is embedded once, matched against the ones you already trust, and answered with the labels of its neighbours — no prompt, no tokens, no round trip.</p>
+        <div class="gt-grid rv" id="gtGrid"></div>
+        <p class="eyebrow rv">1,203 human labels · 2,817 accepted from the LLM</p>
+      </div>
+
+      <div class="stack">
+        <div class="seg rv" role="group" aria-label="Example record">
+          <button id="qA" aria-pressed="true">car_005.jpg</button>
+          <button id="qB" aria-pressed="false">car_006.jpg</button>
+        </div>
+        <div class="query-box rv" id="queryBox">
+          <div style="display:flex; align-items:center; gap:14px; margin-bottom:12px">
+            <div id="qSil" style="width:96px; flex:none"></div>
+            <div>
+              <p style="font-family:var(--mono); font-size:12.5px" id="qName">car_005.jpg</p>
+              <p class="sub" style="font-size:12px; margin-top:2px" id="qDesc">Full-size SUV, quilted leather</p>
+            </div>
+          </div>
+          <p class="eyebrow" style="margin-bottom:6px">Nearest labeled examples</p>
+          <div id="nbrList"></div>
+          <div class="verdict" id="verdict"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== routing ===================== -->
+<section class="band" id="routing" data-sec="routing">
+  <div class="wrap">
+    <div class="sec-label"><span class="bar"></span><span class="eyebrow">Adaptive inference</span></div>
+    <div class="two" style="align-items:end; margin-bottom:34px">
+      <h2 class="rv">Spend tokens only where they change the answer.</h2>
+      <p class="sub rv">One threshold decides how much of your dataset an LLM ever sees. Move it and watch accuracy, latency, and bill move with it — on 2,480 vehicle listings.</p>
+    </div>
+
+    <div class="lab-panel rv">
+      <div class="lab-body">
+        <div class="route-bar" aria-hidden="true">
+          <div class="route-fast" id="barFast" style="width:96%"><span id="barFastTxt">embedding classifier</span></div>
+          <div class="route-llm" id="barLLM" style="width:4%"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-top:9px; font-family:var(--mono); font-size:11px">
+          <span style="color:var(--model)" id="capFast">2,378 rows · no LLM</span>
+          <span style="color:var(--llm)" id="capLLM">102 rows · escalated</span>
+        </div>
+        <label for="thr" class="eyebrow" style="display:block; margin-top:26px">Confidence threshold — escalate below <b id="thrVal" style="color:var(--ink)">0.90</b></label>
+        <input type="range" id="thr" min="50" max="99" value="90" step="1" aria-describedby="thrHelp">
+        <div style="display:flex; justify-content:space-between; font-family:var(--mono); font-size:10.5px; color:var(--mute)">
+          <span>0.50 — cheapest</span><span>0.99 — most accurate</span>
+        </div>
+        <p id="thrHelp" class="sub" style="margin-top:16px; font-size:13px" aria-live="polite"></p>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="v" id="sCalls">102</div><div class="l">LLM calls</div></div>
+        <div class="stat"><div class="v" id="sCost">$0.08</div><div class="l">Total cost</div></div>
+        <div class="stat"><div class="v" id="sAcc">98.6%</div><div class="l">Accuracy</div></div>
+        <div class="stat"><div class="v" id="sLat">52 ms</div><div class="l">Mean latency</div></div>
+      </div>
+    </div>
+
+    <div class="two" style="margin-top:34px">
+      <div class="code rv">
+        <div class="code-bar"><span class="fname">routing.py</span></div>
+<pre class="src">predictor <span class="p">=</span> <span class="cl">AdaptivePredictor</span>(
+    fast<span class="p">=</span>semantic_model,
+    fallback<span class="p">=</span>llm_predictor,
+    threshold<span class="p">=</span><span class="n">0.90</span>,
+)</pre>
+      </div>
+      <div class="stack">
+        <p class="sub rv">Everything the fallback answers is queued as a labeling candidate. Accept it and it joins the ground truth, so the fast path covers more of your data next run — the same active-learning loop you would otherwise build by hand.</p>
+        <div class="flow rv" style="padding:16px 20px">
+          <div class="flow-step"><span class="n2">↳</span> 37 records waiting for review</div>
+          <div class="flow-note" style="margin-top:6px">unfold review --feature vehicle_type</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== llm predict ===================== -->
+<section class="band" id="predict" data-sec="predict">
+  <div class="wrap">
+    <div class="sec-label"><span class="bar"></span><span class="eyebrow">Capability B — LLM Predict</span></div>
+    <div class="two" style="align-items:end; margin-bottom:38px">
+      <h2 class="rv">Give your LLM evidence, not just a prompt.</h2>
+      <p class="sub rv">Gradient boosting is better than any language model at reading tabular signal. Retrieval is better at finding precedent. Let them do that work first, then hand the LLM everything they found.</p>
+    </div>
+
+    <div class="two">
+      <div class="rv funnel">
+        <p class="eyebrow" style="margin-bottom:12px">Evidence assembled for record #4471</p>
+        <div class="ev-list">
+          <div class="ev-row"><div class="nm">XGBoost<small>tabular · 41 features</small></div><div class="vv">0.71</div></div>
+          <div class="ev-row"><div class="nm">LightGBM<small>tabular · monotone constraints</small></div><div class="vv">0.64</div></div>
+          <div class="ev-row"><div class="nm">Semantic k-NN<small>image + description embedding</small></div><div class="vv">0.82</div></div>
+          <div class="ev-row"><div class="nm">Similar customers<small>4 of 5 nearest churned</small></div><div class="vv">0.80</div></div>
+        </div>
+        <div class="merge">
+          <span class="vline"></span>
+          <div class="node">LLMPredictor<span style="color:var(--mute)"> · claude-sonnet</span></div>
+          <span class="vline"></span>
+          <div class="out"><b>0.76</b><span>churn probability</span></div>
+        </div>
+      </div>
+
+      <div class="stack">
+        <div class="code rv">
+          <div class="code-bar"><span class="fname">churn.py</span></div>
+<pre class="src">predictor <span class="p">=</span> <span class="cl">LLMPredictor</span>(
+    target<span class="p">=</span><span class="s">"churn"</span>,
+    models<span class="p">=</span>[xgb_model, lgbm_model, semantic_knn],
+    examples<span class="p">=</span><span class="s">"semantic"</span>,
+    n_examples<span class="p">=</span><span class="n">5</span>,
+)
+predictor.fit(X_train, y_train)
+predictor.predict(X_test)</pre>
+        </div>
+        <div class="code rv">
+          <div class="code-bar"><span class="fname">rendered context</span><span class="tag">what the model actually receives</span></div>
+<pre class="src"><span class="c">Customer</span>
+  age            34
+  plan           enterprise
+  usage_change   -31%
+
+<span class="c">Model predictions</span>
+  XGBoost        0.71
+  LightGBM       0.64
+
+<span class="c">Semantic neighbours</span>
+  #192  sim 0.93  churned
+  #817  sim 0.89  churned
+  #211  sim 0.86  retained
+
+Estimate the probability that this
+customer will churn.</pre>
+        </div>
+        <p class="sub rv">Few-shot examples are retrieved per record, not pasted once and reused. Every prediction gets the five precedents that actually resemble it.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== api ===================== -->
+<section class="band" id="api" data-sec="api">
+  <div class="wrap">
+    <div class="sec-label"><span class="bar"></span><span class="eyebrow">Familiar API</span></div>
+    <div class="two" style="align-items:end; margin-bottom:34px">
+      <h2 class="rv">If you know scikit-learn, you already know this.</h2>
+      <p class="sub rv">The four methods you expect, plus three you always wished you had.</p>
+    </div>
+    <div class="two">
+      <div class="code rv">
+        <div class="code-bar"><span class="fname">the part you already know</span></div>
+<pre class="src">feature.fit(X, y)
+feature.transform(X)
+
+model.fit(X, y)
+model.predict(X)
+model.predict_proba(X)</pre>
+      </div>
+      <div class="code rv">
+        <div class="code-bar"><span class="fname">the part that is new</span></div>
+<pre class="src">model.explain(X)      <span class="c"># evidence behind each call</span>
+model.confidence(X)   <span class="c"># per-row, before you commit</span>
+model.examples(X)     <span class="c"># records it reasoned from</span>
+model.cost(X)         <span class="c"># estimate before you run</span></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== providers ===================== -->
+<section class="band" id="providers" data-sec="providers">
+  <div class="wrap">
+    <div class="sec-label"><span class="bar"></span><span class="eyebrow">Everything is swappable</span></div>
+    <div class="two" style="align-items:end; margin-bottom:20px">
+      <h2 class="rv">Bring your models. Keep your pipeline.</h2>
+      <p class="sub rv">Providers are configuration, not architecture. Swap an embedding model or move the fallback on-premises without touching a line of feature code.</p>
+    </div>
+    <div class="rv">
+      <div class="prov-row">
+        <div class="rl">Traditional ML<small>estimators &amp; evidence</small></div>
+        <div class="badges"><span class="badge">scikit-learn</span><span class="badge">XGBoost</span><span class="badge">LightGBM</span><span class="badge">CatBoost</span><span class="badge custom">any predict_proba</span></div>
+      </div>
+      <div class="prov-row">
+        <div class="rl">Embeddings<small>text, image, multimodal</small></div>
+        <div class="badges"><span class="badge">OpenAI</span><span class="badge">Voyage</span><span class="badge">Cohere</span><span class="badge">CLIP</span><span class="badge">Sentence Transformers</span><span class="badge custom">custom encoder</span></div>
+      </div>
+      <div class="prov-row">
+        <div class="rl">LLMs<small>fallback &amp; reasoning layer</small></div>
+        <div class="badges"><span class="badge">Anthropic</span><span class="badge">OpenAI</span><span class="badge">Gemini</span><span class="badge">Ollama</span><span class="badge">vLLM</span><span class="badge custom">custom endpoint</span></div>
+      </div>
+      <div class="prov-row">
+        <div class="rl">Storage<small>vectors, cache, provenance</small></div>
+        <div class="badges"><span class="badge">local parquet</span><span class="badge">DuckDB</span><span class="badge">pgvector</span><span class="badge">S3</span><span class="badge custom">bring your own</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== inspect ===================== -->
+<section class="band" id="inspect" data-sec="inspect">
+  <div class="wrap">
+    <div class="sec-label"><span class="bar"></span><span class="eyebrow">Inspect everything</span></div>
+    <div class="two" style="align-items:end; margin-bottom:34px">
+      <h2 class="rv">Nothing here is a black box.</h2>
+      <p class="sub rv">Every value carries its source, its confidence, the examples behind it, and what it cost. You can put this in a review meeting.</p>
+    </div>
+    <div class="two">
+      <pre class="term rv">
+<span class="hd">&gt;&gt;&gt; model.explain(car_005)</span>
+
+<span class="hd">Prediction</span>
+  value            <span class="w">SUV</span>
+  confidence       <span class="g">0.96</span>
+  strategy         embedding_classifier
+  embedding_model  voyage-multimodal-3
+<hr>
+<span class="hd">Evidence</span>
+  #182   SUV      <span class="g">0.96</span>   <span class="b">human</span>
+  #891   SUV      <span class="g">0.93</span>   <span class="b">human</span>
+  #441   SUV      <span class="g">0.89</span>   <span class="y">llm</span>
+  #327   Truck    0.74   <span class="b">human</span>
+<hr>
+  LLM calls        <span class="g">0</span>
+  latency          18 ms
+  estimated cost   <span class="g">$0.0000</span></pre>
+      <div class="stack">
+        <pre class="term rv">
+<span class="hd">$ unfold status vehicle_type</span>
+
+  records          <span class="w">12,481</span>
+  human labels      <span class="b">1,203</span>
+  llm labels        <span class="y">2,817</span>
+  model labels      <span class="g">8,461</span>
+  needs review         <span class="w">37</span>
+<hr>
+  version          v12
+  ground truth     1,284 locked
+  fallback         claude-sonnet
+  drift (7d)       <span class="g">none detected</span></pre>
+        <p class="sub rv">Features are versioned with the labels that produced them, so a rerun three months from now gives you the same numbers — or tells you exactly which label changed.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== close ===================== -->
+<section class="close" id="get-started">
+  <div class="wrap">
+    <h2 class="rv">Use LLMs where reasoning helps.<br>Use models where models are enough.</h2>
+    <p class="lede rv" style="margin:0 auto 30px; text-align:center">Open source, provider-agnostic, and about ten minutes from your first feature.</p>
+    <div class="hero-cta rv" style="justify-content:center">
+      <a class="btn" href="#top">Read the quickstart</a>
+      <a class="btn ghost" href="#top">View on GitHub</a>
+    </div>
+    <div class="hero-cta rv" style="justify-content:center; margin-top:16px">
+      <div class="install"><span class="p">$</span> <b>pip install unfold</b>
+        <button class="copy" id="copyBtn2" aria-label="Copy install command">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 3.5v-1h-8v8h1"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="wrap">
+  <div class="foot">
+    <span>unfold v0.4.2 · MIT</span>
+    <a href="#top">Docs</a><a href="#top">Guides</a><a href="#top">API reference</a><a href="#top">Changelog</a>
+    <span class="grow">Requires Python ≥ 3.10</span>
+  </div>
+</footer>
+
+</main>
+
+<script>
+(function(){
+  "use strict";
+  const $ = s => document.querySelector(s);
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- vehicle silhouettes ---------- */
+  const PATHS = {
+    sedan: "M8 45 L8 36 C8 33 10 31 14 30 L34 18 C38 15.5 42 14.5 47 14.5 L67 14.5 C72 14.5 76 15.5 80 18 L94 29 L106 31 C111 32 114 35 114 39 L114 45 Z",
+    suv:   "M8 45 L8 34 C8 31 10 29 14 28 L26 14 C29 11 33 10 38 10 L82 10 C87 10 91 11 94 14 L104 27 L108 28 C112 29 114 32 114 36 L114 45 Z",
+    truck: "M8 45 L8 34 C8 31 10 29 14 28 L24 13 C26 10.5 29 9.5 33 9.5 L56 9.5 C59 9.5 61 11 61 14 L61 26 L114 26 L114 45 Z",
+    van:   "M8 45 L8 26 C8 20 11 16 17 14 L26 9 C29 7.5 32 7 36 7 L104 7 C110 7 114 11 114 17 L114 45 Z"
+  };
+  const WHEELS = { sedan:[30,92], suv:[30,92], truck:[28,94], van:[32,94] };
+  function silhouette(type, tint){
+    const t = PATHS[type] ? type : 'suv';
+    return '<svg viewBox="0 0 120 56" role="img" aria-label="' + t + '">'
+      + '<path d="' + PATHS[t] + '" fill="' + (tint || '#CBD3CB') + '"/>'
+      + WHEELS[t].map(cx => '<circle cx="'+cx+'" cy="45" r="7.5" fill="#0F1317"/><circle cx="'+cx+'" cy="45" r="2.8" fill="#fff"/>').join('')
+      + '</svg>';
+  }
+
+  /* ---------- dataset ---------- */
+  const ROWS = [
+    { i:0, price:"32,000", mileage:"18,200", img:"car_001.jpg", desc:"Compact SUV, panoramic roof", cmt:"Loved the interior",
+      f:{ vehicle_type:{v:"SUV",src:"model",conf:.94,type:"category",source:"image",model:"voyage-multimodal-3",nb:"#192 SUV · #441 SUV · #892 SUV"},
+          sentiment:{v:"positive",src:"model",conf:.97,type:"category",source:"customer_comment",model:"text-embedding-3-large",nb:"#77 positive · #310 positive"},
+          luxury_score:{v:"0.72",src:"model",conf:.88,type:"float",source:"image + description",model:"voyage-multimodal-3",nb:"#204 0.75 · #661 0.69"} } },
+    { i:1, price:"21,500", mileage:"54,100", img:"car_002.jpg", desc:"Reliable family sedan", cmt:"A bit noisy on the highway",
+      f:{ vehicle_type:{v:"Sedan",src:"human",conf:1,type:"category",source:"image",model:"—",nb:"labeled by dana@ on 12 Mar"},
+          sentiment:{v:"neutral",src:"model",conf:.81,type:"category",source:"customer_comment",model:"text-embedding-3-large",nb:"#12 neutral · #508 neutral"},
+          luxury_score:{v:"0.31",src:"model",conf:.9,type:"float",source:"image + description",model:"voyage-multimodal-3",nb:"#88 0.28 · #402 0.34"} } },
+    { i:2, price:"47,900", mileage:"6,400", img:"car_003.jpg", desc:"Crew-cab pickup, tow package", cmt:"Tows everything I own",
+      f:{ vehicle_type:{v:"Truck",src:"model",conf:.91,type:"category",source:"image",model:"voyage-multimodal-3",nb:"#55 Truck · #210 Truck · #733 Truck"},
+          sentiment:{v:"positive",src:"model",conf:.93,type:"category",source:"customer_comment",model:"text-embedding-3-large",nb:"#91 positive · #145 positive"},
+          luxury_score:{v:"0.55",src:"model",conf:.84,type:"float",source:"image + description",model:"voyage-multimodal-3",nb:"#333 0.57 · #712 0.52"} } },
+    { i:3, price:"18,250", mileage:"88,700", img:"car_004.jpg", desc:"Panel van, ex-fleet", cmt:"Paint is peeling",
+      f:{ vehicle_type:{v:"Van",src:"llm",conf:.92,type:"category",source:"image",model:"claude-sonnet (fallback)",nb:"escalated · margin 0.03"},
+          sentiment:{v:"negative",src:"model",conf:.88,type:"category",source:"customer_comment",model:"text-embedding-3-large",nb:"#40 negative · #601 negative"},
+          luxury_score:{v:"0.12",src:"model",conf:.95,type:"float",source:"image + description",model:"voyage-multimodal-3",nb:"#19 0.10 · #480 0.15"} } },
+    { i:4, price:"61,400", mileage:"2,100", img:"car_005.jpg", desc:"Full-size SUV, quilted leather", cmt:"Feels incredibly well made",
+      f:{ vehicle_type:{v:"SUV",src:"model",conf:.96,type:"category",source:"image",model:"voyage-multimodal-3",nb:"#182 SUV · #891 SUV · #441 SUV"},
+          sentiment:{v:"positive",src:"model",conf:.98,type:"category",source:"customer_comment",model:"text-embedding-3-large",nb:"#22 positive · #390 positive"},
+          luxury_score:{v:"0.91",src:"model",conf:.92,type:"float",source:"image + description",model:"voyage-multimodal-3",nb:"#101 0.93 · #256 0.88"} } },
+    { i:5, price:"25,800", mileage:"37,500", img:"car_006.jpg", desc:"Lifted wagon, body cladding", cmt:"Not sure what to call it",
+      f:{ vehicle_type:{v:"SUV",src:"llm",conf:.88,type:"category",source:"image",model:"claude-sonnet (fallback)",nb:"escalated · top margin 0.02"},
+          sentiment:{v:"neutral",src:"llm",conf:.79,type:"category",source:"customer_comment",model:"claude-sonnet (fallback)",nb:"escalated · no confident neighbours"},
+          luxury_score:{v:"0.44",src:"model",conf:.86,type:"float",source:"image + description",model:"voyage-multimodal-3",nb:"#517 0.41 · #229 0.47"} } }
+  ];
+  const SRC_LABEL = { human:"human label", model:"embedding classifier", llm:"LLM fallback" };
+
+  /* ---------- dataframe render ---------- */
+  const head = $('#dfHead'), body = $('#dfBody');
+  let view = 'raw', selected = null;
+
+  function th(name, dtype){ return '<th><span class="cn">'+name+'</span><span class="dt">'+dtype+'</span></th>'; }
+
+  function render(){
+    if(view === 'raw'){
+      head.innerHTML = '<tr><th></th>' + th('price','float64') + th('mileage','int64') + th('image','image') + th('description','text') + th('customer_comment','text') + '</tr>';
+      body.innerHTML = ROWS.map(r =>
+        '<tr><td class="idx">'+r.i+'</td>'
+        + '<td class="num">'+r.price+'</td>'
+        + '<td class="num">'+r.mileage+'</td>'
+        + '<td class="raw-ref">'+r.img+'</td>'
+        + '<td class="txt">'+r.desc+'</td>'
+        + '<td class="txt">'+r.cmt+'</td></tr>').join('');
+    } else {
+      head.innerHTML = '<tr><th></th>' + th('price','float64') + th('mileage','int64') + th('vehicle_type','category') + th('sentiment','category') + th('luxury_score','float [0,1]') + '</tr>';
+      body.innerHTML = ROWS.map(r => {
+        const c = k => {
+          const d = r.f[k];
+          const sel = (selected && selected.row === r.i && selected.key === k) ? 'true' : 'false';
+          return '<td><button class="cell" data-row="'+r.i+'" data-key="'+k+'" aria-selected="'+sel+'">'
+            + '<i class="dot '+d.src+'"></i><span class="val">'+d.v+'</span></button></td>';
+        };
+        return '<tr><td class="idx">'+r.i+'</td><td class="num">'+r.price+'</td><td class="num">'+r.mileage+'</td>'
+          + c('vehicle_type') + c('sentiment') + c('luxury_score') + '</tr>';
+      }).join('');
+    }
+  }
+
+  function showProv(rowIdx, key){
+    const r = ROWS[rowIdx], d = r.f[key];
+    $('#provCard').innerHTML =
+      '<h4>'+key+'</h4>'
+      + '<div class="big">'+d.v+'</div>'
+      + '<span class="chip '+d.src+'"><i class="dot '+d.src+'"></i>'+SRC_LABEL[d.src]+'</span>'
+      + '<div class="meter"><i style="width:'+Math.round(d.conf*100)+'%"></i></div>'
+      + '<dl style="margin:14px 0 0">'
+      + '<div class="kv"><dt>confidence</dt><dd>'+d.conf.toFixed(2)+'</dd></div>'
+      + '<div class="kv"><dt>row</dt><dd>'+r.img+'</dd></div>'
+      + '<div class="kv"><dt>source</dt><dd>'+d.source+'</dd></div>'
+      + '<div class="kv"><dt>type</dt><dd>'+d.type+'</dd></div>'
+      + '<div class="kv"><dt>model</dt><dd>'+d.model+'</dd></div>'
+      + '<div class="kv"><dt>llm calls</dt><dd>'+(d.src === 'llm' ? '1' : '0')+'</dd></div>'
+      + '</dl>'
+      + '<p class="sub" style="font-size:11.5px; font-family:var(--mono); margin-top:12px; line-height:1.6">'+d.nb+'</p>';
+  }
+
+  body.addEventListener('click', e => {
+    const btn = e.target.closest('.cell');
+    if(!btn) return;
+    selected = { row:+btn.dataset.row, key:btn.dataset.key };
+    body.querySelectorAll('.cell').forEach(b => b.setAttribute('aria-selected','false'));
+    btn.setAttribute('aria-selected','true');
+    showProv(selected.row, selected.key);
+  });
+
+  function setView(v){
+    view = v;
+    $('#tabRaw').setAttribute('aria-pressed', String(v === 'raw'));
+    $('#tabFeat').setAttribute('aria-pressed', String(v === 'feat'));
+    render();
+    if(v === 'feat'){
+      if(!selected) selected = { row:5, key:'vehicle_type' };
+      const b = body.querySelector('.cell[data-row="'+selected.row+'"][data-key="'+selected.key+'"]');
+      if(b) b.setAttribute('aria-selected','true');
+      showProv(selected.row, selected.key);
+    } else {
+      $('#provCard').innerHTML = '<p class="empty">Five raw columns. Two of them — the photo and the comment — are invisible to every model you have. Switch to <b>derived features</b> to see what they become.</p>';
+    }
+  }
+  $('#tabRaw').addEventListener('click', () => setView('raw'));
+  $('#tabFeat').addEventListener('click', () => setView('feat'));
+  setView('raw');
+
+  /* ---------- ground truth gallery ---------- */
+  const GALLERY = [
+    ['suv','SUV','human'], ['sedan','Sedan','human'], ['truck','Truck','human'], ['van','Van','llm'],
+    ['suv','SUV','human'], ['truck','Truck','llm'], ['sedan','Sedan','human'], ['suv','SUV','human']
+  ];
+  $('#gtGrid').innerHTML = GALLERY.map(g =>
+    '<div class="gt-card">' + silhouette(g[0], '#C9D1C9') + '<div class="lab"><i class="dot '+g[2]+'"></i>'+g[1]+'</div></div>').join('');
+
+  /* ---------- query / neighbours ---------- */
+  const QUERIES = {
+    A: { name:'car_005.jpg', desc:'Full-size SUV, quilted leather', sil:'suv',
+         nbrs:[['suv','SUV',.96,'#182'],['suv','SUV',.93,'#891'],['suv','SUV',.89,'#441'],['truck','Truck',.74,'#327'],['van','Van',.68,'#605']],
+         verdict:{ label:'SUV', conf:'0.96', src:'model', path:'embedding classifier',
+                   note:'Three confident neighbours agree. The answer is already in your labeled data.',
+                   stats:[['llm calls','0'],['latency','18 ms'],['cost','$0.0000']] } },
+    B: { name:'car_006.jpg', desc:'Lifted wagon, body cladding', sil:'suv',
+         nbrs:[['suv','SUV',.61,'#733'],['truck','Truck',.59,'#118'],['van','Van',.57,'#490'],['sedan','Sedan',.55,'#276'],['suv','SUV',.54,'#812']],
+         verdict:{ label:'SUV', conf:'0.88', src:'llm', path:'LLM fallback',
+                   note:'Top two labels differ by 0.02. Rather than return a weak guess, unfold escalates — and queues the answer for review.',
+                   stats:[['llm calls','1'],['latency','840 ms'],['cost','$0.0008']] } }
+  };
+  function drawQuery(key){
+    const q = QUERIES[key];
+    $('#qSil').innerHTML = silhouette(q.sil, '#0F1317');
+    $('#qName').textContent = q.name;
+    $('#qDesc').textContent = q.desc;
+    $('#nbrList').innerHTML = q.nbrs.map((n,idx) =>
+      '<div class="nbr'+(key === 'B' ? ' dim' : (idx > 2 ? ' dim' : ''))+'">'
+      + '<div class="rid">'+n[3]+'</div>'
+      + '<div class="lab">'+n[1]+'</div>'
+      + '<div class="bar"><i style="width:'+Math.round(n[2]*100)+'%"></i></div>'
+      + '<div class="sim">'+n[2].toFixed(2)+'</div></div>').join('');
+    const v = q.verdict;
+    $('#verdict').innerHTML =
+      '<div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap">'
+      + '<span class="chip '+v.src+'"><i class="dot '+v.src+'"></i>'+v.path+'</span>'
+      + '<span style="font-family:var(--mono); font-size:13px">→ '+v.label+' <span style="color:var(--mute)">('+v.conf+')</span></span></div>'
+      + '<p class="sub" style="font-size:12.5px; margin-top:10px">'+v.note+'</p>'
+      + '<div style="display:flex; gap:18px; margin-top:12px; font-family:var(--mono); font-size:11px; color:var(--mute); flex-wrap:wrap">'
+      + v.stats.map(s => '<span>'+s[0]+' <b style="color:var(--ink); font-weight:500">'+s[1]+'</b></span>').join('') + '</div>';
+  }
+  $('#qA').addEventListener('click', () => { $('#qA').setAttribute('aria-pressed','true'); $('#qB').setAttribute('aria-pressed','false'); drawQuery('A'); });
+  $('#qB').addEventListener('click', () => { $('#qB').setAttribute('aria-pressed','true'); $('#qA').setAttribute('aria-pressed','false'); drawQuery('B'); });
+  drawQuery('A');
+
+  /* ---------- threshold lab ---------- */
+  const N = 2480, PRICE = 0.00078;
+  const ESC = [[50,.4],[70,.9],[80,1.6],[85,2.4],[90,4.1],[95,11.8],[98,26.0],[99,38.0]];
+  const ACC = [[50,95.8],[70,96.6],[80,97.4],[85,98.0],[90,98.6],[95,99.1],[98,99.3],[99,99.4]];
+  function interp(tbl, x){
+    for(let i = 0; i < tbl.length - 1; i++){
+      const a = tbl[i], b = tbl[i+1];
+      if(x >= a[0] && x <= b[0]) return a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]);
+    }
+    return x < tbl[0][0] ? tbl[0][1] : tbl[tbl.length-1][1];
+  }
+  const thr = $('#thr');
+  function updateLab(){
+    const t = +thr.value;
+    const pct = interp(ESC, t), acc = interp(ACC, t);
+    const calls = Math.round(N * pct / 100);
+    const cost = calls * PRICE;
+    const lat = 18 + (pct / 100) * 820;
+    $('#thrVal').textContent = (t / 100).toFixed(2);
+    $('#barFast').style.width = (100 - pct) + '%';
+    $('#barLLM').style.width = pct + '%';
+    $('#barFastTxt').textContent = (100 - pct).toFixed(1) + '% embedding classifier';
+    $('#barLLM').textContent = pct >= 10 ? pct.toFixed(1) + '% LLM' : '';
+    $('#capFast').textContent = (N - calls).toLocaleString() + ' rows · no LLM';
+    $('#capLLM').textContent = calls.toLocaleString() + ' rows · escalated';
+    $('#sCalls').textContent = calls.toLocaleString();
+    $('#sCost').textContent = '$' + cost.toFixed(2);
+    $('#sAcc').textContent = acc.toFixed(1) + '%';
+    $('#sLat').textContent = Math.round(lat) + ' ms';
+    $('#thrHelp').textContent = pct < 3
+      ? 'Almost everything resolves against your labeled examples. ' + calls + ' records reach the LLM.'
+      : (pct < 12
+        ? 'A small ambiguous tail escalates. This is the range most teams ship in.'
+        : 'You are now paying for reasoning on records the classifier could have answered. Accuracy gains flatten; latency does not.');
+  }
+  thr.addEventListener('input', updateLab);
+  updateLab();
+
+  /* ---------- copy ---------- */
+  function wireCopy(id){
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('click', async () => {
+      try{ await navigator.clipboard.writeText('pip install unfold'); }catch(e){}
+      el.classList.add('done');
+      setTimeout(() => el.classList.remove('done'), 1400);
+    });
+  }
+  wireCopy('copyBtn'); wireCopy('copyBtn2');
+
+  /* ---------- reveal + rail ---------- */
+  const revs = document.querySelectorAll('.rv');
+  if(reduce){ revs.forEach(r => r.classList.add('in')); }
+  else{
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(en => { if(en.isIntersecting){ en.target.classList.add('in'); io.unobserve(en.target); } });
+    }, { rootMargin:'0px 0px -8% 0px', threshold:.08 });
+    revs.forEach((r, i) => { r.style.transitionDelay = Math.min(i % 5, 4) * 55 + 'ms'; io.observe(r); });
+  }
+
+  const secs = [...document.querySelectorAll('[data-sec]')];
+  const rails = [...document.querySelectorAll('.rail-item')];
+  function onScroll(){
+    // safety net: anything already scrolled past must never stay hidden
+    revs.forEach(r => {
+      if(!r.classList.contains('in') && r.getBoundingClientRect().top < window.innerHeight) r.classList.add('in');
+    });
+    const mid = window.scrollY + window.innerHeight * 0.4;
+    let cur = secs[0];
+    secs.forEach(s => { if(s.offsetTop <= mid) cur = s; });
+    const key = cur.dataset.sec;
+    rails.forEach(r => r.classList.toggle('on', r.dataset.rail === key));
+  }
+  window.addEventListener('scroll', onScroll, { passive:true });
+  onScroll();
+})();
+</script>
+</body>
+</html>
