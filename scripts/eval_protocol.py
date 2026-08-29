@@ -4,10 +4,20 @@ CLAUDE.md の「同じ指標で精度を記録する」を機械的に守るた�
 以降 unfold の機能A（特徴量生成）・機能B（LLMPredictor）を試すときも、
 必ず `cross_validate()` を経由させて `results/leaderboard.csv` に積む。
 
+データセットは2つあり、CV の手続きは共通で置き場所と目的変数だけが違う。
+`Dataset` として定義してあり、リーダーボードも別ファイルに分けている
+（価格の単位が 万円 / USD で違うため、同じ表に混ぜると比較できるように見えてしまう）。
+
+    SIENTA   … シエンタ 5,507行・日本語・単一車種  → results/leaderboard.csv
+    VEHICLES … Craigslist 20万行・英語・複数車種   → results/leaderboard_vehicles.csv
+
+    cross_validate("手法名", fit_predict, df, dataset=VEHICLES)
+
 固定しているもの（一度決めたら変えない。変えるなら過去の行も引き直す）:
 
 - データ    : sampledata/processed/usedsienta_clean.parquet（シエンタ 5,513行）
-- 目的変数  : 車両本体価格_万円
+              sampledata/processed/vehicles_multi_clean.parquet（Craigslist 200,374行）
+- 目的変数  : 車両本体価格_万円 / 価格_usd
               ※ 支払総額ではない。支払総額には店舗ごとの諸費用が乗っていて、
                  車両そのものの価値以外の分散が混ざるため。
 - 分割      : KFold(n_splits=5, shuffle=True, random_state=42)
@@ -30,6 +40,7 @@ CLAUDE.md の「同じ指標で精度を記録する」を機械的に守るた�
 from __future__ import annotations
 
 import csv
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -39,12 +50,47 @@ import pandas as pd
 from sklearn.model_selection import KFold
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA = ROOT / "sampledata" / "processed" / "usedsienta_clean.parquet"
-LEADERBOARD = ROOT / "results" / "leaderboard.csv"
 
-TARGET = "車両本体価格_万円"
 SEED = 42
 N_SPLITS = 5
+
+
+@dataclass(frozen=True)
+class Dataset:
+    """実験対象のデータセット。CV の手続きは共通、置き場所と目的変数だけが違う。
+
+    リーダーボードを分けているのは、価格の単位（万円 / USD）も行数も違うため。
+    同じ表に混ぜると MAE の数字が比較できるように見えてしまう。
+    """
+    name: str
+    path: Path
+    target: str
+    leaderboard: Path
+    unit: str
+
+
+SIENTA = Dataset(
+    name="シエンタ（単一車種・日本語）",
+    path=ROOT / "sampledata" / "processed" / "usedsienta_clean.parquet",
+    target="車両本体価格_万円",
+    leaderboard=ROOT / "results" / "leaderboard.csv",
+    unit="万円",
+)
+
+VEHICLES = Dataset(
+    name="Craigslist（複数車種・英語）",
+    path=ROOT / "sampledata" / "processed" / "vehicles_multi_clean.parquet",
+    target="価格_usd",
+    leaderboard=ROOT / "results" / "leaderboard_vehicles.csv",
+    unit="USD",
+)
+
+DEFAULT = SIENTA
+
+# 後方互換（シエンタ用スクリプトが直接参照している）
+DATA = SIENTA.path
+LEADERBOARD = SIENTA.leaderboard
+TARGET = SIENTA.target
 
 # --- 特徴量の区分 -----------------------------------------------------
 # 「従来手法」の列。スクレイピング当時に回帰分析へ入れていたものと同じ構成。
@@ -74,18 +120,28 @@ TEXT_COL = "装備テキスト"
 #                                               予測に使うのは筋が悪いので外す
 
 
-def load_dataset(verbose: bool = True) -> pd.DataFrame:
-    """学習用データを読む。目的変数が欠損の行（「応談」表記）だけ落とす。"""
-    df = pd.read_parquet(DATA)
+def load_dataset(verbose: bool = True, dataset: Dataset = DEFAULT,
+                 sample: int | None = None) -> pd.DataFrame:
+    """学習用データを読む。目的変数が欠損の行だけ落とす。
+
+    sample を渡すと seed 固定でランダムに間引く（Craigslist 20万行を
+    そのまま埋め込み比較まで回すと現実的な時間に収まらないため）。
+    """
+    df = pd.read_parquet(dataset.path)
     n_before = len(df)
-    df = df[df[TARGET].notna()].reset_index(drop=True)
+    df = df[df[dataset.target].notna()].reset_index(drop=True)
+    n_notna = len(df)
+    if sample is not None and sample < len(df):
+        df = df.sample(n=sample, random_state=SEED).reset_index(drop=True)
+    y = df[dataset.target]
     if verbose:
-        print(f"データ: {DATA.relative_to(ROOT)}")
-        print(f"  {n_before:,} 行 → {len(df):,} 行"
-              f"（価格欠損 {n_before - len(df)} 行を除外）")
-        print(f"  価格: 中央値 {df[TARGET].median():.1f} 万円 / "
-              f"平均 {df[TARGET].mean():.1f} 万円 / "
-              f"範囲 {df[TARGET].min():.0f}〜{df[TARGET].max():.0f} 万円")
+        print(f"データ: {dataset.path.relative_to(ROOT)}（{dataset.name}）")
+        print(f"  {n_before:,} 行 → {n_notna:,} 行"
+              f"（価格欠損 {n_before - n_notna} 行を除外）"
+              + (f" → 抽出 {len(df):,} 行" if len(df) != n_notna else ""))
+        print(f"  価格: 中央値 {y.median():,.1f} {dataset.unit} / "
+              f"平均 {y.mean():,.1f} {dataset.unit} / "
+              f"範囲 {y.min():,.0f}〜{y.max():,.0f} {dataset.unit}")
     return df
 
 
@@ -106,6 +162,8 @@ def cross_validate(
     note: str = "",
     record: bool = True,
     verbose: bool = True,
+    dataset: Dataset = DEFAULT,
+    oof_out: dict | None = None,
 ) -> dict[str, float]:
     """5-fold CV を回し、結果を leaderboard.csv に1行追記する。
 
@@ -114,20 +172,27 @@ def cross_validate(
     万円に戻しておくこと。指標は必ず万円で計算する。
     """
     if df is None:
-        df = load_dataset(verbose=False)
+        df = load_dataset(verbose=False, dataset=dataset)
+    target = dataset.target
 
     kf = KFold(n_splits=N_SPLITS, shuffle=True, random_state=SEED)
     per_fold: list[dict[str, float]] = []
+    # oof_out を渡すと out-of-fold 予測を受け取れる。
+    # 「未知の車種名の行だけで MAE を測る」ような事後分析に使う。
+    oof = np.full(len(df), np.nan)
+    fold_id = np.zeros(len(df), dtype=int)
 
     for fold, (tr_idx, te_idx) in enumerate(kf.split(df), start=1):
         train_df = df.iloc[tr_idx].reset_index(drop=True)
         test_df = df.iloc[te_idx].reset_index(drop=True)
         y_pred = np.asarray(fit_predict(train_df, test_df), dtype=float)
-        y_true = test_df[TARGET].to_numpy(dtype=float)
+        y_true = test_df[target].to_numpy(dtype=float)
         if y_pred.shape != y_true.shape:
             raise ValueError(
                 f"{name}: 予測の形が合いません {y_pred.shape} != {y_true.shape}"
             )
+        oof[te_idx] = y_pred
+        fold_id[te_idx] = fold
         m = _metrics(y_true, y_pred)
         per_fold.append(m)
         if verbose:
@@ -142,13 +207,18 @@ def cross_validate(
               f"  RMSE {agg['RMSE']:6.2f}  MAPE {agg['MAPE']:5.1f}%"
               f"  R2 {agg['R2']:.3f}")
 
+    if oof_out is not None:
+        oof_out["pred"] = oof
+        oof_out["fold"] = fold_id
     if record:
-        _append(name, agg, len(df), note)
+        _append(name, agg, len(df), note, dataset)
     return agg
 
 
-def _append(name: str, agg: dict[str, float], n_rows: int, note: str) -> None:
-    LEADERBOARD.parent.mkdir(exist_ok=True)
+def _append(name: str, agg: dict[str, float], n_rows: int, note: str,
+            dataset: Dataset = DEFAULT) -> None:
+    board = dataset.leaderboard
+    board.parent.mkdir(exist_ok=True)
     header = ["実行日時", "手法", "MAE", "MAE_std", "RMSE", "MAPE", "R2",
               "行数", "fold数", "seed", "備考"]
     row = [
@@ -158,18 +228,18 @@ def _append(name: str, agg: dict[str, float], n_rows: int, note: str) -> None:
         f"{agg['MAPE']:.2f}", f"{agg['R2']:.4f}",
         n_rows, N_SPLITS, SEED, note,
     ]
-    is_new = not LEADERBOARD.exists()
-    with LEADERBOARD.open("a", newline="", encoding="utf-8-sig") as f:
+    is_new = not board.exists()
+    with board.open("a", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f)
         if is_new:
             w.writerow(header)
         w.writerow(row)
 
 
-def show_leaderboard() -> pd.DataFrame:
+def show_leaderboard(dataset: Dataset = DEFAULT) -> pd.DataFrame:
     """これまでの全実験を MAE 昇順で表示する。"""
-    if not LEADERBOARD.exists():
+    if not dataset.leaderboard.exists():
         print("まだ結果がありません。")
         return pd.DataFrame()
-    lb = pd.read_csv(LEADERBOARD, encoding="utf-8-sig")
+    lb = pd.read_csv(dataset.leaderboard, encoding="utf-8-sig")
     return lb.sort_values("MAE").reset_index(drop=True)

@@ -45,7 +45,7 @@ from eval_protocol import (  # noqa: E402
     DATA, EXTRA_CAT, EXTRA_NUM, LEGACY_BOOL, LEGACY_CAT, LEGACY_NUM,
     ROOT, TARGET, cross_validate, load_dataset,
 )
-from run_baselines import LGBM_PARAMS, _as_category, _numeric_frame  # noqa: E402
+from features import LGBM_PARAMS, as_category as _as_category, numeric_frame as _numeric_frame  # noqa: E402
 
 EMB_DIR = ROOT / "sampledata" / "processed"
 EMB_FILES = {

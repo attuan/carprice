@@ -155,10 +155,21 @@ duckdb.sql("SELECT manufacturer, count(*) FROM "
 モデリングで部分集合を DataFrame にする段階になったら pandas に渡す。
 中間データは `sampledata/processed/` に **parquet** で保存する（CSVより小さく速い）。
 
+学習用に整形したものは `scripts/clean_vehicles.py` が作る
+（`sampledata/processed/vehicles_multi_clean.parquet`, 200,374行）。
+複数車種での検証結果は `docs/2026-08-29-vehicles-multi.md`。
+
 ### 既知のデータ品質問題
 
 `vehicles.csv` の `price` は外れ値が激しい。平均 $75,199 に対し中央値 $13,950、
 最大は $3,736,928,711。**平均を使う前に必ず外れ値処理をすること。**
+
+**同じ車が複数の地域に重複出稿されている。** 同一 VIN が最大 261 件あり、
+価格まで同一。フィルタ後 346,371 行のうち 145,997 行（42%）が重複で、
+これを残したままランダム分割の交差検証をすると同じ車が train と test に入る。
+**必ず1台1行に潰してから評価すること**（`clean_vehicles.py` が実施済み）。
+手を抜くと MAE が 4.2%・R² が 0.03 だけ良く見える（実測は
+`scripts/check_duplicate_leak.py`）。テキスト特徴量を使うほど影響が大きい。
 
 ## ノートブック
 

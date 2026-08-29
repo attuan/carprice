@@ -20,9 +20,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from eval_protocol import (  # noqa: E402
-    LEGACY_BOOL, LEGACY_CAT, LEGACY_NUM, cross_validate, load_dataset,
+    LEGACY_BOOL, LEGACY_CAT, LEGACY_NUM, TARGET, cross_validate, load_dataset,
 )
-from run_baselines import make_lgbm  # noqa: E402
+from features import make_lgbm  # noqa: E402
 
 
 def main() -> None:
@@ -45,7 +45,7 @@ def main() -> None:
     print()
     for name, num, cat, note in runs:
         print(f"[{name}]")
-        cross_validate(name, make_lgbm(num, LEGACY_BOOL, cat), df, note=note)
+        cross_validate(name, make_lgbm(TARGET, num, LEGACY_BOOL, cat), df, note=note)
         print()
 
 
