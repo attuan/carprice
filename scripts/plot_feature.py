@@ -97,7 +97,44 @@ def fig_vehicles() -> None:
     print("保存: results/feature_vehicles.png")
 
 
+UNSEEN = [
+    ("手書きルール", 2623, 4118),
+    ("文字TF-IDF", 2511, 3715),
+    ("e5 埋め込み", 2470, 3873),
+    ("従来の最良\n（併用・手組み）", 2455, 3768),
+    ("機能A\n既定エンコーダ", 2464, 3730),
+]
+
+
+def fig_unseen() -> None:
+    """既知／未知の車種名で分けた MAE（P2）。"""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(8.6, 4.6))
+    x = np.arange(len(UNSEEN))
+    w = 0.38
+    known = [k for _, k, _ in UNSEEN]
+    unseen = [u for _, _, u in UNSEEN]
+    b1 = ax.bar(x - w / 2, known, w, label="既知の車種名", color="tab:blue")
+    b2 = ax.bar(x + w / 2, unseen, w, label="未知の車種名", color="tab:red")
+    for bars in (b1, b2):
+        for b in bars:
+            ax.text(b.get_x() + b.get_width() / 2, b.get_height() + 30,
+                    f"{b.get_height():,.0f}", ha="center", fontsize=9)
+    ax.set_xticks(x)
+    ax.set_xticklabels([n for n, _, _ in UNSEEN], fontsize=9)
+    ax.set_ylabel("MAE（USD・低いほど良い）")
+    ax.set_ylim(2000, 4400)
+    ax.legend()
+    ax.grid(axis="y", alpha=0.3)
+    ax.set_title("機能A の既定エンコーダは未知語に強い側に着地した\n"
+                 "（未知の車種名は test 行の 10.7%）", fontsize=12)
+    fig.tight_layout()
+    fig.savefig(OUT / "feature_unseen.png", dpi=150)
+    print("保存: results/feature_unseen.png")
+
+
 if __name__ == "__main__":
     fig_ladder()
     fig_routing()
     fig_vehicles()
+    fig_unseen()
