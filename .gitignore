@@ -17,6 +17,9 @@ sampledata/processed/*
 
 # Python
 .venv/
+# 埋め込み計算専用の隔離環境（torch 2.2.2 + numpy 1.x）。
+# 主環境の numpy 2.x と非互換なので分けてある。scripts/setup_embed_env.sh で作れる
+.venv-embed/
 __pycache__/
 *.pyc
 venv/

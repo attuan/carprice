@@ -1,0 +1,16 @@
+# 埋め込み計算専用の隔離環境（.venv-embed）の依存。主環境の requirements.txt とは別物。
+#
+# バージョンを厳密に固定している理由:
+#   Intel Mac では torch は 2.2.2 が上限（それ以降は Apple Silicon 向けしかビルドされていない）。
+#   torch 2.2.2 は numpy 1.x でビルドされているので numpy<2 が必須。
+#   さらに transformers 5.x は torch>=2.5 を要求して読み込みに失敗するため、
+#   torch 2.2 世代と同時期の 4.40 系に揃える必要がある。
+#   （固定しないと最新版が入って NameError: name 'nn' is not defined で落ちる）
+numpy<2
+torch==2.2.2
+transformers==4.40.2
+tokenizers<0.20
+huggingface_hub==0.23.5
+sentence-transformers==2.7.0
+pandas
+pyarrow

@@ -88,3 +88,37 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def embedding_compare(lb: pd.DataFrame) -> None:
+    """埋め込み vs 正規表現 / TF-IDF の対比図。run_embedding.py の後に呼ぶ。"""
+    pairs = [
+        ("グレード情報の取り出し方\n（従来列 + α）",
+         [("正規表現で\nグレード名を抽出", "Ab1 +グレード名", "#4a7fb0"),
+          ("タイトルの埋め込み\n（ルールなし）", "D2 従来列+タイトル埋め込み(グレード名なし)", "#2e6b4f")]),
+        ("装備テキストの入れ方\n（構造化列フル + α）",
+         [("文字TF-IDF", "C2 B+装備テキスト(文字TF-IDF)", "#4a7fb0"),
+          ("埋め込み", "D1 B+装備テキスト埋め込み", "#2e6b4f")]),
+    ]
+    last = lb.drop_duplicates("手法", keep="last").set_index("手法")
+
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.2))
+    for ax, (title, items) in zip(axes, pairs):
+        labels = [i[0] for i in items]
+        vals = [last.loc[i[1], "MAE"] for i in items]
+        errs = [last.loc[i[1], "MAE_std"] for i in items]
+        colors = [i[2] for i in items]
+        bars = ax.bar(labels, vals, yerr=errs, capsize=5, color=colors, width=0.55)
+        for b, v in zip(bars, vals):
+            ax.text(b.get_x() + b.get_width() / 2, v + 0.25, f"{v:.2f}",
+                    ha="center", fontsize=11, fontweight="bold")
+        ax.set_title(title, fontsize=11)
+        ax.set_ylabel("MAE（万円）")
+        ax.set_ylim(0, max(vals) * 1.25)
+        ax.grid(axis="y", alpha=0.3)
+        ax.annotate(f"差 {abs(vals[0]-vals[1]):.2f}", xy=(0.5, max(vals) * 1.12),
+                    ha="center", fontsize=10, color="#b03030")
+    fig.suptitle("埋め込みは人手のルールに並ぶか（緑＝埋め込み）", fontsize=12)
+    fig.tight_layout()
+    fig.savefig(OUT / "embedding_compare.png", dpi=150)
+    print("保存:", OUT / "embedding_compare.png")
