@@ -17,6 +17,9 @@ lightgbm
 anthropic        # Claude API（LLMPredictor が呼ぶ先）
 python-dotenv    # APIキーを .env から読む
 
+# テスト
+pytest           # unfold のテスト（tests/）
+
 # ユーティリティ
 kaggle           # scripts/download_data.py が使う
 tqdm             # 進捗バー

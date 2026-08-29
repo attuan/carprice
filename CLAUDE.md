@@ -62,7 +62,9 @@ Python ライブラリ `unfold` として設計し直された（→ `dialogs/un
   - `entrysheet.md` — 最初の企画案
   - `2026...ミーティング.md` — 方針が端的にまとまっている。迷ったらまずここ
   - `unfold-landing.html` — 伊藤さんによる設計書
-- `scripts/` — データ取得などの補助スクリプト
+- `unfold/` — **ライブラリ本体**（機能A の骨組み）。仕様書 `dialogs/unfold-landing.html` の実装
+- `tests/` — `unfold` のテスト。`.venv/bin/python -m pytest tests -q`
+- `scripts/` — データ取得・測定などの補助スクリプト
 - `sampledata/` — データ。用途ごとに4つに分かれている（下記）
 
 ## データ

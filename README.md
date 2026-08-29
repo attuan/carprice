@@ -33,6 +33,37 @@ python scripts/download_data.py
 cp .env.example .env           # .env は git 管理外
 ```
 
+## unfold（ライブラリ本体）
+
+`unfold/` が設計書（`dialogs/unfold-landing.html`）の実装です。
+現在あるのは**機能A（`Feature`）の骨組み**で、LLM 呼び出しなしで動きます。
+
+```python
+from unfold import Feature
+
+# 非構造列（タイトル）から、型のついた列を作る
+df["グレード"] = Feature(
+    source="タイトル",
+    type="category",
+    values=["G", "Z", "X", "G クエロ"],
+).fit_transform(df)
+```
+
+`fit` / `transform` のほかに、設計書どおりの検査 API があります。
+
+```python
+f.explain(0)        # そのセルの来歴（値・confidence・参照した事例・費用）
+f.confidence()      # 行ごとの確信度
+f.cost()            # LLM に回る行の割合と費用の見積もり
+f.review_queue()    # 確信度が低くレビュー待ちになった行
+```
+
+測定結果は `docs/2026-08-29-feature-skeleton.md`。テストは次のとおり。
+
+```bash
+.venv/bin/python -m pytest tests -q
+```
+
 ## 分析の始め方
 
 ```bash
