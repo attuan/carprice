@@ -67,6 +67,37 @@ def fig_routing() -> None:
     print("保存: results/feature_routing.png")
 
 
+VEHICLES_LADDER = [
+    ("構造化列のみ", 3233.5, "tab:gray"),
+    ("手書きルール\n正規化", 2783.0, "tab:green"),
+    ("機能A\n人手ラベル200件", 2781.4, "tab:red"),
+    ("機能A\n値の名前だけ", 2789.4, "tab:red"),
+    ("機能A\n埋め込み列", 2601.1, "tab:blue"),
+    ("従来の最良\n（併用・手組み）", 2596.0, "tab:orange"),
+]
+
+
+def fig_vehicles() -> None:
+    """複数車種（Craigslist 60,000行）での機能A。"""
+    fig, ax = plt.subplots(figsize=(8.8, 4.6))
+    labels = [n for n, _, _ in VEHICLES_LADDER]
+    vals = [v for _, v, _ in VEHICLES_LADDER]
+    bars = ax.bar(labels, vals, color=[c for _, _, c in VEHICLES_LADDER])
+    for b, v in zip(bars, vals):
+        ax.text(b.get_x() + b.get_width() / 2, v + 15, f"{v:,.0f}",
+                ha="center", fontsize=10)
+    ax.set_ylabel("MAE（USD・低いほど良い）")
+    ax.set_ylim(2400, 3400)
+    ax.set_title("複数車種での機能A — 埋め込み列だけが手書きルールを超える\n"
+                 "（Craigslist 60,000行・5-fold）", fontsize=12)
+    ax.tick_params(axis="x", labelsize=9)
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(OUT / "feature_vehicles.png", dpi=150)
+    print("保存: results/feature_vehicles.png")
+
+
 if __name__ == "__main__":
     fig_ladder()
     fig_routing()
+    fig_vehicles()
