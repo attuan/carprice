@@ -14,3 +14,9 @@ huggingface_hub==0.23.5
 sentence-transformers==2.7.0
 pandas
 pyarrow
+
+# 表形式データの基盤モデル（PRD の P0.5 / R6 のベースライン）。
+# 最新版 8.x は torch>=2.5 を要求し、x86_64 Mac には入らない（torch は 2.2.2 が上限）。
+# 2.2.1 は torch>=2.1,<3 なのでこの環境に乗る。これは PRD が引用している
+# Nature 2025 の版そのものなので、比較対象としてはむしろこちらが正しい。
+tabpfn==2.2.1
