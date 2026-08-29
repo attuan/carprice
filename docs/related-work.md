@@ -80,3 +80,114 @@ LLMを使わない側の到達点を押さえておかないと「改善した�
    これを超えられないと「LLMで改善」の主張が弱くなる。
 4. 価格は分布で出す価値がある（ProbSAINT / 2506.06657）。点推定のRMSEだけでなく
    予測区間の評価も指標に入れると差別化しやすい。
+
+---
+
+# 追補: 特徴量エンジニアリング自動化（AutoFE）の先行事例
+
+2026-08-29 追記。方式③（＝伊藤さん仕様書の機能A）に絞って掘り下げた結果。
+**この分野は2015年から続く独立した研究領域で、LLM版もすでに4世代ある。**
+「先行事例が無い」という前提でゼロから作ると、確実に車輪の再発明になる。
+
+## A. LLM 以前の系譜（2015〜2022）— 「演算子を総当たりして選別する」
+
+いずれも「既存の列に四則演算・log・集約などの変換を機械的に大量適用し、
+効いたものだけ残す（expand-and-reduce）」という同じ骨格を持つ。
+LLM が来る前の到達点であり、**LLM版の比較対象は常にこれら**。
+
+- **Deep Feature Synthesis / Featuretools** (DSAA 2015, MIT)
+  https://groups.csail.mit.edu/EVO-DesignOpt/groupWebSite/uploads/Site/DSAA_DSM_2015.pdf
+  複数テーブルのリレーションを辿って集約特徴量を自動生成。この分野の元祖。
+  Kaggle 的なコンペで906チーム中615チームに勝った、というのが当時の宣伝文句。
+- **Cognito** (ICDMW 2016, IBM) — 変換を階層的・貪欲に探索。
+- **ExploreKit** (ICDM 2016) — 候補生成 + 学習済みランカーで選別。
+- **Feature Engineering for Predictive Modeling using RL** (AAAI 2018, Khurana ら)
+  変換の適用順を強化学習で決める路線の代表。
+- **SAFE** (2020) https://arxiv.org/abs/2003.02556 — 産業スケール向けの高速版。
+- **autofeat** — 非線形変換を大量生成 → 線形モデルで選別。
+- **OpenFE** (ICML 2023) https://arxiv.org/abs/2211.12507
+  LightGBM ベースの選別。**「専門家を超える」を標榜する現行最強クラスの非LLM手法。**
+  → 機能Aを評価するなら、LLM無しのこれを必ず並べること。
+
+## B. LLM 以後の系譜（2023〜）— 「列名と背景知識から意味のある特徴量を書く」
+
+Aとの違いは、列名やデータセット説明文という**意味情報**を使う点。
+「価格 ÷ 走行距離」のような、人間なら思いつくが総当たりでは出にくい特徴量を狙う。
+
+- **CAAFE** (NeurIPS 2023) https://arxiv.org/abs/2305.03403 ※上記1章にも記載
+  第1世代。説明文 → LLM が pandas コードを生成 → 検証スコアで採否。
+- **FeatLLM** (ICML 2024) https://arxiv.org/abs/2404.09491
+  「Large Language Models Can Automatically Engineer Features for Few-Shot Tabular Learning」
+  LLM にルール（条件分岐）を書かせて**二値特徴量**に落とし、線形回帰など軽いモデルで予測。
+  少数サンプル（few-shot）設定に特化。TabLLM・STUNT を上回る。
+- **OCTree** (NeurIPS 2024) https://arxiv.org/abs/2406.08527
+  実装: https://github.com/jaehyun513/OCTree
+  CAAFE の弱点＝「検証スコアという数字しかLLMに返さない」を改善。
+  **決定木を自然言語に書き下してLLMにフィードバック**し、反復で規則を改善する。
+- **LLM-FE** (TMLR 2026) https://arxiv.org/abs/2503.14434
+  実装: https://github.com/nikhilsab/llmfe
+  特徴量生成を**プログラム探索**とみなし、LLM を進化的アルゴリズムの変異操作として使う。
+  複数の系統（island）を並列に進化させ、高性能プログラムを外部メモリに蓄積。
+  CAAFE / OCTree が単一経路の逐次改善なのに対し、こちらは並列探索。現時点の最新到達点。
+- **LATTEArena** (2026-06) https://arxiv.org/abs/2606.09004
+  **この分野の統一ベンチマーク。** 15手法を部品に分解して24構成を比較し、
+  精度だけでなく**トークン消費量と実行の頑健性**まで測っている。
+  4000件超の実行ログ公開。→ 評価設計を考えるときの下敷きにできる。
+
+## C. 逆風・注意すべき否定的結果（重要）
+
+「LLMで特徴量生成すれば改善する」は無条件には成り立たない。
+
+- **LLMs Engineer Too Many Simple Features For Tabular Data** (2024-10)
+  https://arxiv.org/abs/2410.17787
+  4モデル×27データセット。**LLM は加算のような単純な演算子に偏り、
+  groupby+集約のような複雑な操作を使えない。** この偏りは精度をむしろ下げうる。
+  → 生成された特徴量の演算子分布を集計して偏りを見る、という評価軸が要る。
+- **TabPrep** (2026-06) https://arxiv.org/abs/2606.02384
+  実装: https://github.com/atschalz/tabprep
+  **LLMを一切使わず**、データの構造的パターン3種を狙った前処理・特徴量生成だけで
+  TabArena ベンチマークの木系・NN系・基盤モデル全部の性能を底上げし、
+  モデル側の工夫による改善幅をしばしば上回った。
+  → 「LLMで改善した」と言う前に、**地味な前処理でどこまで行くか**を潰しておく必要がある。
+
+## D. 機能A（埋め込み→近傍分類）に一番近い先行事例
+
+注意: 伊藤さん仕様書の機能Aは「LLMに特徴量生成コードを書かせる」CAAFE系とは**別物**。
+非構造列（画像・自由記述）を埋め込んで既存ラベルの近傍で型付き列にする、という設計なので、
+系譜としては **AutoFE ではなくマルチモーダル表形式学習**に属する。こちらの先行事例:
+
+- **Benchmarking Multimodal AutoML for Tabular Data with Text Fields** (NeurIPS 2021 D&B)
+  https://arxiv.org/abs/2111.02705 — テキスト列を含む表データのベンチマーク。
+- **AutoGluon-Multimodal (AutoMM)** (2024) https://arxiv.org/abs/2404.16233
+  画像・テキスト・表を統合する AutoML。**機能Aの機能的な競合そのもの。**
+- **Bag of Tricks for Multimodal AutoML** (2024) https://arxiv.org/abs/2412.16243
+  実務的知見が詰まっている。曰く、テキスト埋め込みは PCA で次元を落として GBDT に入れる、
+  ユニーク値50未満のテキスト列はカテゴリ扱いにする、
+  ドメイン適応した埋め込みは汎用埋め込みに勝る、集約は Stack-Ensemble が最良。
+  → **機能Aの「埋め込みを特徴量にする」部分は、ここに書かれた既知手法とほぼ同じ。**
+- **CARTE** / **PORTAL** (2024) https://arxiv.org/abs/2410.13516
+  文字列を含む表データ向けの基盤モデル。CatBoost+埋め込みと同程度、という報告。
+
+### 中古車ドメインでのマルチモーダル価格予測
+
+- **AI Blue Book: Vehicle Price Prediction using Visual Features** (2018)
+  https://arxiv.org/abs/1803.11227 — 車両画像から価格を予測。画像列を使う場合の先行事例。
+- **Multi-modal ML for Vehicle Rating Predictions** (2023) https://arxiv.org/abs/2305.15218
+  画像・テキスト・パラメータの3モーダル統合。
+- **Deep end-to-end learning for price prediction of second-hand items** (KIS 2020)
+- 小売価格推定のマルチモーダル枠組み (ScienceDirect 2025)
+  EfficientNet(画像) + GloVe/BiLSTM(テキスト) + 埋め込み(カテゴリ) を late fusion。
+
+## 示唆（追補分）
+
+1. **「特徴量生成の自動化」自体は完全に既存研究。** 新規性を主張するなら生成手法ではなく、
+   (a) 中古車という具体ドメインでの検証、(b) 来歴管理・信頼度ルーティングという
+   **運用側の設計**、(c) scikit-learn 互換 API としての使いやすさ、のどれかになる。
+2. **比較対象は最低3本立て。** ①素の GBDT、②OpenFE / TabPrep（LLM無しAutoFE）、
+   ③CAAFE または LLM-FE（LLM有りAutoFE）。②を置かないと「LLMのおかげ」が言えない。
+3. **回帰タスクでの検証が手薄い。** CAAFE・FeatLLM・OCTree は分類ベンチマーク中心。
+   中古車価格＝回帰で体系的に測ること自体に一定の価値がある。
+4. **評価軸に「コスト」と「安定性」を入れる。** LATTEArena がまさにこれをやっている。
+   精度だけ見ると、トークンを大量に燃やして0.5%改善、のような結論になりやすい。
+5. **演算子の偏りを監視する。** 2410.17787 の指摘どおり、LLM生成特徴量は単純操作に偏る。
+   生成物の内訳を集計する仕組みを最初から入れておくと、そのまま考察材料になる。
