@@ -177,8 +177,11 @@ def screen(df: pd.DataFrame, target: str, text: str, *,
 
         fit は必ず train だけで行う（test の情報が漏れると寄与が過大に出る）。
         """
+        # min_df は行数に応じて緩める。少ない行数で 5 のままだと
+        # 語彙が空になり、sklearn が分かりにくい例外を投げる。
         vec = TfidfVectorizer(analyzer="char_wb", ngram_range=(2, 4),
-                              min_df=5, max_features=2000)
+                              min_df=min(5, max(1, len(train) // 50)),
+                              max_features=2000)
         A = vec.fit_transform(_clip(train[text]))
         B = vec.transform(_clip(test[text]))
         n_comp = min(64, A.shape[1] - 1)
