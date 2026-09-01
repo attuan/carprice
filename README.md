@@ -83,6 +83,34 @@ pred = model.fit(train_df).predict(test_df)
 正解ラベルを別途用意する必要はありません。訓練データの価格がそのまま
 フューショットの例になります。
 
+### 信頼度ルーティング — `AdaptivePredictor`（どの行を LLM に回すか）
+
+機能B は**1行につき1回 LLM を呼ぶ**ので、行数がそのまま費用と時間になります
+（6万行なら約 $516・約17時間）。そこで「LLM を呼ぶ前に手に入る信号」だけで
+呼ぶ行を選び、残りは統計モデルに任せます。閾値ひとつで
+「全行呼ぶ」と「1行も呼ばない」の間を連続に動かせます。
+
+```python
+from unfold import AdaptivePredictor
+
+model = AdaptivePredictor(target="価格_usd", unit="USD",
+                          numeric=["車齢", "走行距離_mile"],
+                          categorical=["メーカー", "州"], text="車種名",
+                          escalate_rate=0.3)     # 信号の強い上位3割だけ回す
+model.fit(train)
+model.plan(test)      # 呼ぶ前に「何行・いくら・何秒」（LLM を呼ばないので無料）
+pred = model.predict(test)
+model.curve(test)     # 割合を振ったときの精度・費用・レイテンシ
+model.approve()       # LLM の答えを承認 → 次回はその行を呼ばずに返る
+```
+
+既定の信号は **LightGBM と XGBoost の予測の食い違い**（統計モデル自身が
+迷っている行に回す）で、実測で最良でした。`signal="unseen"` にすると
+訓練データに無い車種名・グレードを含む行を優先します。
+
+Craigslist の 60 行で上位30%だけ回した実測は
+**MAE 2,767 → 2,476（費用 $0.155）**。詳しくは `docs/2026-09-01-adaptive.md`。
+
 ### 使う前に — そのデータで効くかを確かめる
 
 機能B は「テキストが価格を左右するデータ」でしか効きません（シエンタでは負け、

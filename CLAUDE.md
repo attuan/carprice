@@ -65,6 +65,7 @@ Python ライブラリ `unfold` として設計し直された（→ `dialogs/un
 - `unfold/` — **ライブラリ本体**。仕様書 `dialogs/unfold-landing.html` の実装
   - `feature.py` — 機能A（`Feature`）。埋め込み → 近傍分類 → 確信度の低い行だけ LLM へ
   - `predictor.py` — 機能B（`LLMPredictor`）。統計モデルと類似事例を証拠に LLM が最終判断
+  - `adaptive.py` — 信頼度ルーティング（`AdaptivePredictor`）。機能B を包み、呼ぶ前に手に入る信号で LLM に回す行を絞る
   - `llm.py` — **唯一 Claude API を呼ぶ場所**。ディスクキャッシュ・費用計上・並列実行
 - `tests/` — `unfold` のテスト。`.venv/bin/python -m pytest tests -q`
 - `scripts/` — データ取得・測定などの補助スクリプト
@@ -163,6 +164,18 @@ duckdb.sql("SELECT manufacturer, count(*) FROM "
 学習用に整形したものは `scripts/clean_vehicles.py` が作る
 （`sampledata/processed/vehicles_multi_clean.parquet`, 200,374行）。
 複数車種での検証結果は `docs/2026-08-29-vehicles-multi.md`。
+
+### 中間データの並び順を変えない
+
+`sampledata/processed/` は「コードで再生成できる」建前だが、**再生成した
+parquet の行の並びが変わると測定が再現できなくなる。** DuckDB は並列に読むので、
+`ORDER BY` を書かないと同じ SQL でも並びが実行ごとに変わり、
+位置で引く `load_dataset(sample=60_000)` が別の6万行を返す。
+プロンプトが変われば LLM のキャッシュも全部外れて課金され直す。
+
+`clean_vehicles.py` は `ORDER BY 物件ID` で固定済み（9/1 に修正）。
+**新しく中間データを作るスクリプトを書くときも、必ず書き出しの並びを固定すること。**
+なお 8/31 までの Craigslist の測定値は修正前のもので、そのままでは再現できない。
 
 ### 既知のデータ品質問題
 

@@ -123,7 +123,12 @@ def main(dedup: bool = True) -> None:
 
     out = OUT if dedup else OUT_DUP
     out.parent.mkdir(parents=True, exist_ok=True)
-    con.sql(f"COPY clean TO '{out}' (FORMAT PARQUET)")
+    # **必ず 物件ID 順で書き出す。** DuckDB は並列に読むので、指定しないと
+    # 実行のたびに行の並びが変わる。並びが変われば
+    # `load_dataset(sample=60_000)` が引く 6 万行も変わり、
+    # 同じ seed でも別のデータで測ることになる（LLM のキャッシュも全部外れる）。
+    con.sql(f"COPY (SELECT * FROM clean ORDER BY 物件ID) "
+            f"TO '{out}' (FORMAT PARQUET)")
 
     # --- 4. 要約 ----------------------------------------------------------
     print(f"元データ            {n_all:,} 行")
