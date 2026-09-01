@@ -25,6 +25,12 @@ CLAUDE.md の「同じ指標で精度を記録する」を機械的に守るた�
               主指標は MAE。中央値185万円に対して外れ値が穏やかなので、
               RMSE より解釈しやすい（MAE 10 = 平均10万円ずれる）。
 
+固定できないもの（記録して区別する）:
+
+- 実行環境  : 機械が違うと同じコード・同じデータでも MAE が僅かに動く。
+              固定できないので `実行環境` 列に測定機を記録し、
+              混在時は `show_leaderboard()` が警告する。
+
 使い方:
 
     from eval_protocol import load_dataset, cross_validate
@@ -40,6 +46,8 @@ CLAUDE.md の「同じ指標で精度を記録する」を機械的に守るた�
 from __future__ import annotations
 
 import csv
+import os
+import platform
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -53,6 +61,35 @@ ROOT = Path(__file__).resolve().parent.parent
 
 SEED = 42
 N_SPLITS = 5
+
+# --- 測定機の識別 -----------------------------------------------------
+# 同じコード・同じデータでも、機械が違うと MAE が僅かに動く。LightGBM の
+# バイナリ差（AVX2/clang と AVX-512/gcc で和の順序が変わる）によるもので、
+# 60,000行・1,013列で 0.079% を実測した（docs/2026-09-01-migration.md）。
+# ズレは fold 間のばらつきより1桁小さいが、どの機械で測ったか分からないと
+# 手法による差なのか機械による差なのかを切り分けられない。だから1列足す。
+_KNOWN_HOSTS = {"attuan-compute": "node"}
+
+
+def runtime_tag() -> str:
+    """測定機を表す短い札。
+
+    node = 計算ノード（Ubuntu / m7i.4xlarge）… 測定はここで行う
+    mac  = 手元の Mac（macOS / i7-8850H）  … 8/31 までの記録はすべてこれ
+
+    知らない機械では hostname をそのまま使う。環境変数 CARPRICE_RUNTIME で
+    上書きできる（機械を作り直して hostname が変わったときの逃げ道）。
+    """
+    tag = os.environ.get("CARPRICE_RUNTIME")
+    if tag:
+        return tag
+    host = platform.node().split(".")[0]
+    if host in _KNOWN_HOSTS:
+        return _KNOWN_HOSTS[host]
+    if platform.system() == "Darwin":
+        return "mac"
+    return host or "unknown"
+
 
 
 @dataclass(frozen=True)
@@ -219,10 +256,11 @@ def _append(name: str, agg: dict[str, float], n_rows: int, note: str,
             dataset: Dataset = DEFAULT) -> None:
     board = dataset.leaderboard
     board.parent.mkdir(exist_ok=True)
-    header = ["実行日時", "手法", "MAE", "MAE_std", "RMSE", "MAPE", "R2",
-              "行数", "fold数", "seed", "備考"]
+    header = ["実行日時", "実行環境", "手法", "MAE", "MAE_std", "RMSE", "MAPE",
+              "R2", "行数", "fold数", "seed", "備考"]
     row = [
         datetime.now().strftime("%Y-%m-%d %H:%M"),
+        runtime_tag(),
         name,
         f"{agg['MAE']:.3f}", f"{agg['MAE_std']:.3f}", f"{agg['RMSE']:.3f}",
         f"{agg['MAPE']:.2f}", f"{agg['R2']:.4f}",
@@ -237,9 +275,18 @@ def _append(name: str, agg: dict[str, float], n_rows: int, note: str,
 
 
 def show_leaderboard(dataset: Dataset = DEFAULT) -> pd.DataFrame:
-    """これまでの全実験を MAE 昇順で表示する。"""
+    """これまでの全実験を MAE 昇順で表示する。
+
+    複数の測定機の行が混ざっているときは警告する。並べて見ること自体は
+    構わないが、環境をまたいだ差を手法の差として読んではいけない。
+    """
     if not dataset.leaderboard.exists():
         print("まだ結果がありません。")
         return pd.DataFrame()
     lb = pd.read_csv(dataset.leaderboard, encoding="utf-8-sig")
+    envs = sorted(set(lb.get("実行環境", pd.Series(dtype=str)).dropna()))
+    if len(envs) > 1:
+        print(f"注意: 実行環境が混ざっています（{' / '.join(envs)}）。"
+              "機械が違うと MAE が僅かに動くので、環境をまたいだ行の差は"
+              "手法の差として読まないこと（docs/2026-09-01-migration.md）。")
     return lb.sort_values("MAE").reset_index(drop=True)
