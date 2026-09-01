@@ -207,7 +207,11 @@ class NeighbourModel:
     index: NeighbourIndex
 
     def fit(self, train: pd.DataFrame, y: np.ndarray) -> "NeighbourModel":
-        return self  # 索引は LLMPredictor 側で fit 済み
+        # 索引は通常 LLMPredictor 側で fit 済み。単体で使われたときのために、
+        # まだならここで張る（黙って空の索引を引かせないため）。
+        if not hasattr(self.index, "V_"):
+            self.index.fit(train, y)
+        return self
 
     def predict(self, test: pd.DataFrame) -> np.ndarray:
         idx, _ = self.index.query(test)
@@ -470,14 +474,29 @@ class LLMPredictor:
 
     # --- 検査 API（PRD §6.4）------------------------------------------
 
-    def _require(self) -> list[Prediction]:
+    def _require(self, X: pd.DataFrame | None = None) -> list[Prediction]:
+        """直近の predict の結果を返す。X を渡したら取り違えを検知する。
+
+        検査 API は「直前に predict した X」についてしか答えられない。
+        別の X を渡されたまま黙って前回の結果を返すと、間違った来歴を
+        読んで判断することになるので、長さが違えば止める。
+        """
         if getattr(self, "predictions_", None) is None:
             raise UnfoldError("predict を先に呼んでください。")
+        if X is not None and len(X) != len(self.predictions_):
+            raise UnfoldError(
+                f"直近に predict した行数（{len(self.predictions_)}）と "
+                f"X の行数（{len(X)}）が違います。検査 API は直前の "
+                "predict の結果を返すので、同じ X を渡してください。")
         return self.predictions_
 
     def confidence(self, X: pd.DataFrame | None = None) -> pd.Series:
-        """行ごとの確信度。信頼度ルーティング（機能C）の入力になる。"""
-        return pd.Series([p.confidence for p in self._require()], name="confidence")
+        """行ごとの確信度。信頼度ルーティング（機能C）の入力になる。
+
+        直前の `predict` の結果を返す。X を渡すと行数の一致を検査する。
+        """
+        return pd.Series([p.confidence for p in self._require(X)],
+                         name="confidence")
 
     def examples(self, i: int | None = None) -> pd.DataFrame:
         """推論に使った類似事例。i を渡すとその行のぶんだけ。"""
@@ -493,9 +512,16 @@ class LLMPredictor:
         return pd.DataFrame(rows)
 
     def cost(self, X: pd.DataFrame | None = None) -> dict:
-        """かかった費用と内訳。実行前の見積もりにも使える。"""
+        """かかった費用と内訳。
+
+        まだ predict していなければ、クライアントの累計だけを返す。
+        """
         u = self.client.summary()
         preds = getattr(self, "predictions_", None)
+        if X is not None and preds is not None and len(X) != len(preds):
+            raise UnfoldError(
+                f"直近に predict した行数（{len(preds)}）と "
+                f"X の行数（{len(X)}）が違います。")
         if preds:
             n = len(preds)
             paid = [p for p in preds if not p.from_cache]

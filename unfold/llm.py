@@ -176,13 +176,22 @@ class ClaudeClient:
         return d / f"{key}.json"
 
     def _read_cache(self, key: str) -> dict | None:
+        """キャッシュを読む。壊れていたら None を返して呼び直させる。
+
+        壊れる経路は現実にある（途中で電源が落ちる、別プロセスと衝突する、
+        古い版が書いた形式が残っている）。**ここで例外を投げると、
+        1ファイルの破損で数百行の測定が丸ごと落ちる。**
+        """
         path = self._cache_path(key)
         if path is None or not path.exists():
             return None
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
             return None
+        if not isinstance(record, dict) or not isinstance(record.get("data"), dict):
+            return None
+        return record
 
     def _write_cache(self, key: str, record: dict) -> None:
         path = self._cache_path(key)

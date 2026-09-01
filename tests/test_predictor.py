@@ -305,3 +305,34 @@ def test_キー無しのフォールバックは呼べない():
     assert fb.can_answer() is False
     with pytest.raises(NotImplementedError):
         fb.answer(["x"], ["G"], [{}])
+
+
+def test_壊れたキャッシュは無視して呼び直す(tmp_path, data):
+    """1ファイルの破損で数百行の測定が落ちないこと。"""
+    client = FakeClient(cache_dir=tmp_path)
+    key = client._key("s", "u", {"type": "object"})
+    path = client._cache_path(key)
+    for broken in ("{壊れたJSON", '{"data": "辞書ではない"}', '"文字列"'):
+        path.write_text(broken, encoding="utf-8")
+        assert client._read_cache(key) is None
+
+
+def test_違う行数のXを検査APIに渡すと止まる(data):
+    """別の X の来歴を黙って返すと、間違った根拠で判断することになる。"""
+    m = make(data, client=FakeClient()).fit(data.iloc[:40])
+    m.predict(data.iloc[40:50])
+    m.confidence(data.iloc[40:50])            # 同じ行数なら通る
+    with pytest.raises(UnfoldError):
+        m.confidence(data.iloc[40:45])
+    with pytest.raises(UnfoldError):
+        m.cost(data.iloc[40:45])
+
+
+def test_NeighbourModel_を単体で使っても索引が張られる(data):
+    from unfold.predictor import NeighbourIndex, NeighbourModel
+    spec = ColumnSpec(numeric=["車齢"], text="装備テキスト")
+    m = NeighbourModel("近傍", NeighbourIndex(spec, k=3))
+    train = data.iloc[:40].reset_index(drop=True)
+    m.fit(train, train["価格"].to_numpy())
+    pred = m.predict(data.iloc[40:45].reset_index(drop=True))
+    assert pred.shape == (5,) and np.isfinite(pred).all()
