@@ -66,6 +66,8 @@ Python ライブラリ `unfold` として設計し直された（→ `dialogs/un
   - `feature.py` — 機能A（`Feature`）。埋め込み → 近傍分類 → 確信度の低い行だけ LLM へ
   - `predictor.py` — 機能B（`LLMPredictor`）。統計モデルと類似事例を証拠に LLM が最終判断
   - `adaptive.py` — 信頼度ルーティング（`AdaptivePredictor`）。機能B を包み、呼ぶ前に手に入る信号で LLM に回す行を絞る
+  - `leakage.py` — 重複レコードの検知。fit / predict のときに自動で警告する
+  - `demo.py` — `python -m unfold.demo` で全体を一度に動かす入口。既定では LLM を呼ばない
   - `llm.py` — **唯一 Claude API を呼ぶ場所**。ディスクキャッシュ・費用計上・並列実行
 - `tests/` — `unfold` のテスト。`.venv/bin/python -m pytest tests -q`
 - `scripts/` — データ取得・測定などの補助スクリプト

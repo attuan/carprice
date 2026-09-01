@@ -58,9 +58,15 @@ from unfold.encoders import (
     PrecomputedEncoder,
     SentenceTransformerEncoder,
 )
-from unfold.errors import UnfoldError
+from unfold.errors import UnfoldError, UnfoldWarning
 from unfold.fallback import ClaudeFallback, LLMFallback, QueueOnlyFallback
 from unfold.feature import Feature
+from unfold.leakage import (
+    DuplicateReport,
+    OverlapReport,
+    check_duplicates,
+    check_overlap,
+)
 from unfold.llm import ClaudeClient
 from unfold.predictor import (
     ColumnSpec,
@@ -89,6 +95,11 @@ __all__ = [
     "NeighbourModel",
     "NeighbourIndex",
     "UnfoldError",
+    "UnfoldWarning",
+    "check_duplicates",
+    "check_overlap",
+    "DuplicateReport",
+    "OverlapReport",
     "drop_constant_tokens",
     "screen",
     "ScreeningReport",

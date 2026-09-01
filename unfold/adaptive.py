@@ -56,6 +56,7 @@ import pandas as pd
 
 from unfold.encoders import Encoder
 from unfold.errors import UnfoldError
+from unfold.leakage import check_overlap, warn_if_leaky
 from unfold.llm import ClaudeClient
 from unfold.predictor import (
     BaseModel,
@@ -314,6 +315,13 @@ class AdaptivePredictor:
         m.spec.check(X)
         X = X.reset_index(drop=True)
 
+        # 重複の検知は**全行に対して1回だけ**行う。内側の機能B に任せると
+        # LLM に回した行だけを見ることになり、見落とす
+        if self.predictor.check_leakage:
+            warn_if_leaky(check_overlap(self.predictor.train_, X,
+                                        keys=self.spec.all_columns()),
+                          where="train と test")
+
         ev = self._evidence(X)
         s = self._signal_values(X, ev)
         sel = self._select(s)
@@ -345,7 +353,12 @@ class AdaptivePredictor:
         rows = np.flatnonzero(sel)
         if len(rows):
             sub = X.iloc[rows].reset_index(drop=True)
-            values = m.predict(sub, verbose=verbose)
+            was = m.check_leakage
+            m.check_leakage = False          # 上で全行ぶん見たので二重に出さない
+            try:
+                values = m.predict(sub, verbose=verbose)
+            finally:
+                m.check_leakage = was
             for pos, gi in enumerate(rows):
                 out[gi] = float(values[pos])
                 preds[int(gi)] = m.predictions_[pos]

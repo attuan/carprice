@@ -38,6 +38,7 @@ import pandas as pd
 
 from unfold.encoders import CharTfidfEncoder, Encoder
 from unfold.errors import UnfoldError
+from unfold.leakage import check_duplicates, check_overlap, warn_if_leaky
 from unfold.llm import ClaudeClient, LLMAnswer
 
 SEED = 42
@@ -452,7 +453,8 @@ class LLMPredictor:
                  n_examples: int = 5, neighbour_weight: float = 0.15,
                  encoder: Encoder | None = None,
                  client: ClaudeClient | None = None,
-                 fallback: str = "best_model") -> None:
+                 fallback: str = "best_model",
+                 check_leakage: bool = True) -> None:
         self.target = target
         self.unit = unit
         self.spec = spec or ColumnSpec(
@@ -466,6 +468,9 @@ class LLMPredictor:
         if fallback not in ("best_model", "error"):
             raise UnfoldError('fallback は "best_model" か "error" です')
         self.fallback = fallback
+        #: 重複レコードを検知して警告するか（PRD §6.5）。
+        #: **テキストを特徴量にするほど重複の水増しが大きくなる**ので既定で入れる
+        self.check_leakage = check_leakage
 
     # --- fit ----------------------------------------------------------
 
@@ -489,6 +494,10 @@ class LLMPredictor:
 
         self.train_ = X.reset_index(drop=True)
         self.y_ = y
+        if self.check_leakage:
+            warn_if_leaky(
+                check_duplicates(self.train_, keys=self.spec.all_columns()),
+                where="訓練データ")
         self.index_ = NeighbourIndex(self.spec, k=self.n_examples,
                                      w=self.neighbour_weight,
                                      encoder=self.encoder).fit(self.train_, y)
@@ -531,6 +540,10 @@ class LLMPredictor:
             raise UnfoldError("fit を先に呼んでください。")
         self.spec.check(X)
         X = X.reset_index(drop=True)
+        if self.check_leakage:
+            warn_if_leaky(check_overlap(self.train_, X,
+                                        keys=self.spec.all_columns()),
+                          where="train と test")
 
         # 1. 統計モデルに解かせる
         evidence = {m.name: np.asarray(m.predict(X), dtype=float)

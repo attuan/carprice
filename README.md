@@ -46,7 +46,20 @@ ANTHROPIC_API_KEY=sk-ant-api03-...
 
 ## unfold（ライブラリ本体）
 
-`unfold/` が設計書（`dialogs/unfold-landing.html`）の実装です。機能は2つあります。
+`unfold/` が設計書（`dialogs/unfold-landing.html`）の実装です。
+機能は2つ（`Feature` / `LLMPredictor`）で、そこに「どの行を LLM に回すか」を
+決める信頼度ルーティング（`AdaptivePredictor`）が乗ります。
+
+### まず動かす
+
+**APIキーもデータ取得も要りません。**git に入っている 500 行の抜粋を使い、
+リーク検査 → スクリーニング → 機能A → 費用の見積もり、までを一度に流します。
+**既定では LLM を1回も呼ばない**ので無料です。
+
+```bash
+.venv/bin/python -m unfold.demo              # 無料
+.venv/bin/python -m unfold.demo --run 20     # 20行を予測（うち6行が LLM に回る。約 $0.05）
+```
 
 ### 機能A — `Feature`（特徴量生成）
 
@@ -136,6 +149,24 @@ model = LLMPredictor(..., long_text="説明文")   # 金額は自動で〈金額
 ```
 
 詳しくは `docs/2026-09-01-description-leak.md`。
+
+### 共通 — リーク検査（重複レコードの検知）
+
+**同じ車が train と test の両方に入っていると、予測ではなく答えの読み取りに
+なります。**Craigslist のデータは同じ車が複数の地域に出稿されており、
+重複を残したまま評価すると R² が 0.880 → 0.914 に水増しされました。
+しかも**テキストを特徴量にするほど水増しが大きくなる**ので、
+`unfold` は fit / predict のときに自動で検知して警告します。
+
+```python
+from unfold import check_duplicates, check_overlap
+
+print(check_duplicates(df, keys=["車台番号"]))   # 1つの表の中の重複
+print(check_overlap(train, test))                # train と test にまたがる重複
+```
+
+例外にはしません（重複が意図的なこともあるため）。うるさければ
+`LLMPredictor(..., check_leakage=False)` で切れます。
 
 ### 共通 — 来歴（provenance）の検査 API
 
