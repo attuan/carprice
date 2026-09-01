@@ -44,6 +44,7 @@ from eval_protocol import (  # noqa: E402
     EXTRA_CAT, EXTRA_NUM, LEGACY_BOOL, LEGACY_CAT, LEGACY_NUM, N_SPLITS, SEED,
     SIENTA, VEHICLES, Dataset, load_dataset,
 )
+from features import make_lgbm  # noqa: E402
 from unfold import ColumnSpec, LLMPredictor, TreeModel  # noqa: E402
 from unfold.llm import PRICING, ClaudeClient  # noqa: E402
 
@@ -166,6 +167,7 @@ def run_eval(client: ClaudeClient, n_eval: int, n_examples: int,
         base = {m.name: np.asarray(m.predict(test), dtype=float)
                 for m in model.models_}
 
+
         if dry_run:
             # LLM を呼ばずにプロンプトだけ組んで、長さを測る
             idx, sim = model.index_.query(test)
@@ -181,6 +183,17 @@ def run_eval(client: ClaudeClient, n_eval: int, n_examples: int,
             rows.append({"fold": fold, "n": len(test), **{
                 f"MAE_{k}": mae(truth, v) for k, v in base.items()}})
             continue
+
+
+        # **公平性のための比較線。** 証拠にした木モデルにはテキストを渡して
+        # いないので、機能B が勝っても「LLM が賢い」のか「テキストが効く」のか
+        # 区別できない。そこで**テキストを文字TF-IDF で入れた LightGBM**を
+        # 並べる（リーダーボードの最良構成にあたる）。これは証拠には入れず、
+        # 採点だけする。
+        ref = make_lgbm(ds.target, spec.numeric, spec.boolean,
+                        spec.categorical, spec.text, "char")
+        base["参考: LightGBM+文字TF-IDF"] = np.asarray(
+            ref(train, test), dtype=float)
 
         pred = model.predict(test, verbose=True)
 
@@ -220,8 +233,10 @@ def run_eval(client: ClaudeClient, n_eval: int, n_examples: int,
         best_name = summary.drop("MAE_機能B").idxmin()[4:]
         diff = best_base - summary["MAE_機能B"]
         verdict = "上回った" if diff > 0 else "届かなかった"
-        print(f"\n  → 証拠にした統計モデルの最良は {best_name}（{best_base:,.2f}）。"
+        print(f"\n  → 比較線の最良は {best_name}（{best_base:,.2f}）。"
               f"機能B は {abs(diff):,.2f} {ds.unit} {verdict}。")
+        print("     ※「参考:」が付いた行は証拠には渡していない比較専用のモデル。"
+              "\n        テキストを木に入れた版で、これに勝てるかが本当の関門。")
         print(f"  → LLM が答えた割合 {res['LLMが答えた割合'].mean():.1%} / "
               f"平均 confidence {res['平均confidence'].mean():.2f}")
 
