@@ -62,6 +62,9 @@ Python ライブラリ `unfold` として設計し直された（→ `dialogs/un
   - `entrysheet.md` — 最初の企画案
   - `2026...ミーティング.md` — 方針が端的にまとまっている。迷ったらまずここ
   - `unfold-landing.html` — 伊藤さんによる設計書
+  - `2026-08-31-transcript.md` — 8/31 の生の文字起こし。**約18万文字あるので全文を読まない。**
+    `grep -n` で当たりを付けてから `sed -n 'A,Bp'` で該当箇所だけ開くこと。
+    要点は同日の Gemini メモ側にまとまっているので、まずそちらを見る
 - `unfold/` — **ライブラリ本体**。仕様書 `dialogs/unfold-landing.html` の実装
   - `feature.py` — 機能A（`Feature`）。埋め込み → 近傍分類 → 確信度の低い行だけ LLM へ
   - `predictor.py` — 機能B（`LLMPredictor`）。統計モデルと類似事例を証拠に LLM が最終判断
