@@ -1,7 +1,30 @@
 # carprice
 
 株式会社INDXのインターンにて作成する中古車価格の自動予測プログラムです。
-AutoMLエージェントを構成し、AIによってモデル選択、予測、特徴量選択を行えるようにするつもりです。
+
+成果物は **`unfold`** という scikit-learn 互換の Python ライブラリで、機能は2つあります。
+
+- **機能A（`Feature`）** — 画像や自由記述などの非構造な列を、宣言するだけで型のついた列にする
+- **機能B（`LLMPredictor`）** — 統計モデルに先に解かせ、その予測値と類似事例を証拠として
+  LLM に渡し、最終判断だけさせる
+
+そこに **信頼度ルーティング（`AdaptivePredictor`）** が乗り、「どの行を LLM に回すか」を決めます。
+
+構想は3段階で変わってきました（詳細は `CLAUDE.md`）。当初は「LLM にモデル選択をさせる」案も
+並べていましたが、伊藤さんの設計書（`dialogs/unfold-landing.html`）の段階で**その案は消え**、
+上の2機能に統合されています。**古い資料を読むときはどの時点のものかに注意してください。**
+
+## ドキュメント
+
+測定結果・設計判断・経緯はすべて `docs/` にあります（23本）。
+**`docs/README.md` が入口**で、どれから読むかと、本文に出てくる
+`P3` `S6` `R2` といった記号の意味をまとめてあります。
+
+- **結果だけ知りたい** → `docs/results-summary.md`
+- **経緯を追いたい** → `docs/progress-log.md`
+- **なぜそう作ったのか** → `docs/PRD.md`
+
+---
 
 ## セットアップ
 
@@ -28,6 +51,24 @@ source .venv/bin/activate
 ```
 
 `fonts-noto-cjk` はグラフの日本語表示に必要です（macOS は Hiragino Sans が標準搭載）。
+
+**環境は2つに分かれています。**
+
+| | 中身 | いつ使うか |
+|---|---|---|
+| `.venv`（主環境） | pandas / LightGBM / XGBoost / `unfold` 本体 | ふだんはこちら |
+| `.venv-embed` | torch / sentence-transformers / TabPFN | 埋め込みの計算と TabPFN のときだけ |
+
+**`unfold` は torch 無しで動きます**（既定のエンコーダは文字 TF-IDF）。
+主環境に torch を入れないのは、うっかり torch へ依存してもテストが通ってしまうのを
+防ぐためです。`.venv-embed` が要る作業をするときだけ、次を実行します。
+
+```bash
+bash scripts/setup_embed_env.sh        # requirements-embed.txt から構築
+.venv-embed/bin/python scripts/embed_text.py       # 使うときは python を切り替える
+```
+
+詳しい経緯は `docs/2026-09-01-embed-env-rebuild.md` にあります。
 
 ### 2. データの取得
 
@@ -216,6 +257,17 @@ VS Code で `notebooks/01_explore_vehicles.ipynb` を直接開いても同じこ
 `notebooks/01_explore_vehicles.ipynb` が出発点です。
 上から順に実行すると、vehicles.csv の全体像の確認から
 `sampledata/processed/vehicles_clean.parquet`（380,907行）の生成までが一通り走ります。
+
+**中間データが2つあるので、取り違えないでください。**
+
+| ファイル | 行数 | 列名 | 重複排除 | 用途 |
+|---|---:|---|---|---|
+| `vehicles_clean.parquet` | 380,907 | 英語（元のまま） | **していない** | ノートブックでの探索用 |
+| `vehicles_multi_clean.parquet` | 200,374 | 日本語 | **済み**（1台1行） | **測定はすべてこちら** |
+
+**精度を測るときは必ず `vehicles_multi_clean.parquet`**（`scripts/clean_vehicles.py` が生成）を使います。
+同じ車が複数の地域に重複出稿されているため、重複を残したまま交差検証すると
+train と test に同じ車が入り、成績が良く見えてしまいます。
 
 ## dialogsについて
 
