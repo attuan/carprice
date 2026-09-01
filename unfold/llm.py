@@ -10,6 +10,10 @@
    プロンプトのハッシュをキーにして結果を `sampledata/processed/llm_cache/`
    に置き、2度目以降は課金なしで返す。8/12 ミーティングで課題に挙がった
    「キャッシュ活用による LLM 予測の軽量化」の最小実装でもある。
+   **保存するのは応答だけでなく user プロンプトも。** キーは sha256 なので
+   逆に戻せず、本文を持たないと「何を聞いた結果か」を後から辿れない。
+   system は全行同一なので指紋（`system_sha`）だけ持つ。中身を読むには
+   `.venv/bin/python scripts/show_prompt.py` を使う。
 2. **費用を必ず数える。** PRD S7 の「1行あたりの単価」は実測しないと
    出せない。呼ぶたびにトークンと金額を積む。
 3. **並列で投げる。** 1行1リクエストなので直列だと 300行で数十分かかり、
@@ -108,6 +112,11 @@ def load_api_key() -> str | None:
         if name.strip() == "ANTHROPIC_API_KEY":
             return value.strip().strip('"').strip("'") or None
     return None
+
+
+def _sha8(text: str) -> str:
+    """プロンプト本文の指紋（先頭8桁）。どの版で得た答えかを見分けるため。"""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:8]
 
 
 class ClaudeClient:
@@ -260,8 +269,14 @@ class ClaudeClient:
         cw_tok = int(getattr(u, "cache_creation_input_tokens", 0) or 0)
         cost = self._price(in_tok + int(cw_tok * 1.25), out_tok, cr_tok)
 
+        # **user プロンプトも一緒に保存する。** キーは sha256 なので、
+        # これが無いと「何を聞いた結果なのか」を後から辿れない
+        # （挙動の説明・不審な答えの追跡ができなくなる）。
+        # system は全行で同一なので本文は持たず、指紋だけ持つ。
+        # 本文は unfold/predictor.py の SYSTEM_PROMPT などソース側にある。
         record = {"data": data, "input_tokens": in_tok, "output_tokens": out_tok,
-                  "cache_read_tokens": cr_tok}
+                  "cache_read_tokens": cr_tok,
+                  "user": user, "system_sha": _sha8(system)}
         self._write_cache(key, record)
 
         with self._lock:

@@ -40,6 +40,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
+from dataclasses import replace  # noqa: E402
+
 from eval_protocol import (  # noqa: E402
     EXTRA_CAT, EXTRA_NUM, LEGACY_BOOL, LEGACY_CAT, LEGACY_NUM, N_SPLITS, SEED,
     SIENTA, VEHICLES, Dataset, load_dataset,
@@ -77,13 +79,18 @@ DATASETS: dict[str, Dataset] = {"sienta": SIENTA, "vehicles": VEHICLES}
 # （CLAUDE.md「S1・S2 の線は行数とセットで固定する」）。
 SAMPLES: dict[str, int | None] = {"sienta": None, "vehicles": 60_000}
 
+# 自由記述の本文。--description で使うときだけ ColumnSpec に足す。
+# シエンタ側には自由記述にあたる列が無い（タイトルしか取れていない）。
+LONG_TEXT: dict[str, str | None] = {"sienta": None, "vehicles": "説明文"}
+
 
 def mae(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return float(np.mean(np.abs(np.asarray(y_pred) - np.asarray(y_true))))
 
 
 def build(client: ClaudeClient, n_examples: int, name: str,
-          evidence: str = "all") -> LLMPredictor:
+          evidence: str = "all", description: int = 0,
+          description_examples: int = 0) -> LLMPredictor:
     """機能B を組む。`evidence` で証拠1 に何を並べるかを変える。
 
     "all"    … LightGBM・XGBoost・近傍中央値（既定。設計書どおり全部渡す）
@@ -96,6 +103,14 @@ def build(client: ClaudeClient, n_examples: int, name: str,
     フューショットの仕組みは変わらない。
     """
     ds, spec = DATASETS[name], SPECS[name]
+    if description:
+        # 自由記述を使う版。元の SPECS は書き換えず複製する
+        # （同じプロセスで両方の構成を測ることがあるため）。
+        col = LONG_TEXT.get(name)
+        if col is None:
+            raise SystemExit(f"{name} には自由記述の列がありません")
+        spec = replace(spec, long_text=col, long_text_chars=description,
+                       long_text_example_chars=description_examples)
     models = None
     if evidence == "trees":
         models = [TreeModel("LightGBM", spec, kind="lgbm"),
@@ -111,7 +126,8 @@ def build(client: ClaudeClient, n_examples: int, name: str,
 # ---------------------------------------------------------------------
 
 def run_demo(client: ClaudeClient, n_rows: int, n_examples: int, name: str,
-             evidence: str = "all") -> None:
+             evidence: str = "all", description: int = 0,
+             description_examples: int = 0) -> None:
     ds, spec = DATASETS[name], SPECS[name]
     df = load_dataset(dataset=ds, sample=SAMPLES[name])
     rng = np.random.default_rng(SEED)
@@ -120,7 +136,8 @@ def run_demo(client: ClaudeClient, n_rows: int, n_examples: int, name: str,
     test = df.iloc[idx[:n_rows]].reset_index(drop=True)
 
     print(f"\n訓練 {len(train):,} 行で学習し、{len(test)} 行を予測します。")
-    model = build(client, n_examples, name, evidence).fit(train)
+    model = build(client, n_examples, name, evidence, description,
+                  description_examples).fit(train)
     pred = model.predict(test, verbose=True)
     truth = test[ds.target].to_numpy(dtype=float)
 
@@ -142,7 +159,8 @@ def run_demo(client: ClaudeClient, n_rows: int, n_examples: int, name: str,
 # ---------------------------------------------------------------------
 
 def run_eval(client: ClaudeClient, n_eval: int, n_examples: int,
-             dry_run: bool, name: str, evidence: str = "all") -> None:
+             dry_run: bool, name: str, evidence: str = "all",
+             description: int = 0, description_examples: int = 0) -> None:
     ds, spec = DATASETS[name], SPECS[name]
     df = load_dataset(dataset=ds, sample=SAMPLES[name])
     kf = KFold(n_splits=N_SPLITS, shuffle=True, random_state=SEED)
@@ -161,7 +179,8 @@ def run_eval(client: ClaudeClient, n_eval: int, n_examples: int,
         truth = test[ds.target].to_numpy(dtype=float)
 
         print(f"\n[fold{fold}] 訓練 {len(train):,} 行 → 採点 {len(test)} 行")
-        model = build(client, n_examples, name, evidence).fit(train)
+        model = build(client, n_examples, name, evidence, description,
+                      description_examples).fit(train)
 
         # 統計モデル単体の予測（＝機能B が超えるべき線）
         base = {m.name: np.asarray(m.predict(test), dtype=float)
@@ -174,7 +193,8 @@ def run_eval(client: ClaudeClient, n_eval: int, n_examples: int,
             for i in range(len(test)):
                 nbs = [{"訓練行": int(j), "類似度": float(s),
                         "価格": float(model.index_.y_[j]),
-                        "属性": model.train_.iloc[j][spec.all_columns()].to_dict()}
+                        "属性": model.train_.iloc[j][
+                            model.spec.all_columns()].to_dict()}
                        for j, s in zip(idx[i], sim[i])]
                 ev = {k: float(v[i]) for k, v in base.items()}
                 prompt_chars += len(model._build_prompt(test.iloc[i], ev, nbs))
@@ -192,6 +212,8 @@ def run_eval(client: ClaudeClient, n_eval: int, n_examples: int,
         # 採点だけする。
         ref = make_lgbm(ds.target, spec.numeric, spec.boolean,
                         spec.categorical, spec.text, "char")
+        # 参考線は spec.text（短いテキスト）だけを使う。自由記述は
+        # 数値化していないので木には渡せず、そこが機能B の土俵になる。
         base["参考: LightGBM+文字TF-IDF"] = np.asarray(
             ref(train, test), dtype=float)
 
@@ -242,6 +264,7 @@ def run_eval(client: ClaudeClient, n_eval: int, n_examples: int,
 
     suffix = ("" if name == "sienta" else f"_{name}")
     suffix += "" if evidence == "all" else f"_{evidence}"
+    suffix += f"_desc{description}" if description else ""
     out = ROOT / "results" / f"llm_predictor{suffix}.csv"
     out.parent.mkdir(exist_ok=True)
     res.to_csv(out, index=False, encoding="utf-8-sig")
@@ -290,6 +313,11 @@ def main() -> None:
                     help="sienta=単一車種・日本語 / vehicles=複数車種・英語")
     ap.add_argument("--evidence", default="all", choices=["all", "trees"],
                     help="証拠1 に並べるモデル。trees は近傍中央値を外す")
+    ap.add_argument("--description", type=int, default=0, metavar="文字数",
+                    help="自由記述を査定対象に載せる上限。0 なら使わない")
+    ap.add_argument("--description-examples", type=int, default=0,
+                    metavar="文字数",
+                    help="自由記述を類似事例にも載せる上限。0 なら載せない")
     ap.add_argument("--dry-run", action="store_true",
                     help="LLM を呼ばずにプロンプトだけ組んで費用を見積もる")
     args = ap.parse_args()
@@ -308,10 +336,11 @@ def main() -> None:
 
     if args.demo:
         run_demo(client, args.demo_rows, args.n_examples, args.dataset,
-                 args.evidence)
+                 args.evidence, args.description, args.description_examples)
     else:
         run_eval(client, args.n_eval, args.n_examples, args.dry_run,
-                 args.dataset, args.evidence)
+                 args.dataset, args.evidence, args.description,
+                 args.description_examples)
 
 
 if __name__ == "__main__":

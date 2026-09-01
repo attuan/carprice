@@ -336,3 +336,62 @@ def test_NeighbourModel_を単体で使っても索引が張られる(data):
     m.fit(train, train["価格"].to_numpy())
     pred = m.predict(data.iloc[40:45].reset_index(drop=True))
     assert pred.shape == (5,) and np.isfinite(pred).all()
+
+
+# --- 自由記述と、正解の漏れ対策 ---------------------------------------
+
+def test_金額の伏字():
+    """出品テキストに売り値が書いてあると、予測ではなく読み取りになる。"""
+    from unfold.predictor import mask_amounts
+    assert "$5,900" not in mask_amounts("Lowered! $5,900 plus fees")
+    assert "12500" not in mask_amounts("asking 12500 dollars")
+    assert "〈金額〉" in mask_amounts("price: $6,999")
+    # 走行距離・年式も巻き込むが、構造化列として別に渡しているので損はない
+    assert "222,617" not in mask_amounts("222,617 miles")
+    assert "2008" not in mask_amounts("2008 Toyota Sienna")
+
+
+def test_伏字は車種の数字を残す():
+    """F-150 や Model 3 が消えると、肝心の車種情報が失われる。"""
+    from unfold.predictor import mask_amounts
+    out = mask_amounts("Ford F-150 Raptor 5.7L V8, Tesla Model 3")
+    assert "F-150" in out and "5.7L" in out and "Model 3" in out
+
+
+def test_自由記述は査定対象にだけ載り事例には載らない(data):
+    """5事例ぶん貼るとプロンプトが桁で膨らむ（PRD §6.3）。"""
+    d = data.assign(説明文=[f"この車は良好です 走行{i}00 マイル" for i in range(len(data))])
+    client = FakeClient()
+    m = LLMPredictor(target="価格", unit="万円", numeric=["車齢"],
+                     text="装備テキスト", long_text="説明文",
+                     n_examples=3, client=client).fit(d.iloc[:40])
+    m.predict(d.iloc[40:41])
+    p = client.prompts[0]
+    # 査定対象の説明文は載る
+    assert "この車は良好です" in p
+    # 事例側には載らない（既定 long_text_example_chars=0）
+    assert p.count("この車は良好です") == 1
+
+
+def test_自由記述は上限で切られ切ったことが明示される(data):
+    d = data.assign(説明文=["あ" * 5000] * len(data))
+    client = FakeClient()
+    spec = ColumnSpec(numeric=["車齢"], text="装備テキスト",
+                      long_text="説明文", long_text_chars=100)
+    m = LLMPredictor(target="価格", spec=spec, n_examples=2,
+                     client=client).fit(d.iloc[:40])
+    m.predict(d.iloc[40:41])
+    p = client.prompts[0]
+    assert "文字を省略" in p
+    assert p.count("あ") <= 200      # 5000 文字そのままは入っていない
+
+
+def test_伏字は切ることができる(data):
+    d = data.assign(説明文=["asking $9,999"] * len(data))
+    client = FakeClient()
+    spec = ColumnSpec(numeric=["車齢"], text="装備テキスト", long_text="説明文",
+                      mask_amounts_in_long_text=False)
+    m = LLMPredictor(target="価格", spec=spec, n_examples=2,
+                     client=client).fit(d.iloc[:40])
+    m.predict(d.iloc[40:41])
+    assert "$9,999" in client.prompts[0]

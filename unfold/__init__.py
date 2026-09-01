@@ -55,6 +55,7 @@ from unfold.predictor import (
     TreeModel,
 )
 from unfold.preprocess import drop_constant_tokens
+from unfold.screening import ScreeningReport, screen
 
 __all__ = [
     "Feature",
@@ -73,6 +74,8 @@ __all__ = [
     "NeighbourIndex",
     "UnfoldError",
     "drop_constant_tokens",
+    "screen",
+    "ScreeningReport",
 ]
 
 __version__ = "0.1.0"

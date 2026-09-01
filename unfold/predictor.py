@@ -29,6 +29,7 @@ LLM には最終判断だけさせる。8/31 のミーティングで伊藤さ�
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol, Sequence, runtime_checkable
 
@@ -64,17 +65,40 @@ class BaseModel(Protocol):
 
 @dataclass
 class ColumnSpec:
-    """どの列をどう扱うか。データセットを差し替えるときはここだけ書き換える。"""
+    """どの列をどう扱うか。データセットを差し替えるときはここだけ書き換える。
+
+    `text` と `long_text` を分けているのは**長さの扱いが違う**ため。
+
+    - `text` … 短いテキスト（車種名・装備の羅列）。近傍検索の入力にもなり、
+      査定対象にも類似事例にも丸ごと載る。
+    - `long_text` … 自由記述の本文（Craigslist の `説明文` は中央値 1,075 字・
+      最大 28,832 字）。**5事例ぶん丸ごと貼るとプロンプトが桁で膨らむ**ので、
+      査定対象と類似事例で別々に上限を切る。既定では類似事例には載せない
+      （`long_text_example_chars=0`）。
+
+    この分離が PRD §6.3 の「長い自由記述はそのままでは扱えない」への回答にあたる。
+    """
 
     numeric: list[str] = field(default_factory=list)
     boolean: list[str] = field(default_factory=list)
     categorical: list[str] = field(default_factory=list)
     text: str | None = None
+    long_text: str | None = None
+    #: 査定対象の自由記述に載せる上限文字数。超えた分は切って印を付ける
+    long_text_chars: int = 2000
+    #: 類似事例の自由記述に載せる上限。0 なら載せない（既定）
+    long_text_example_chars: int = 0
+    #: 自由記述の中の金額・価格らしい数字を伏せるか。**既定で伏せる。**
+    #: 出品テキストには売り値が書いてあることが多く、渡すと予測ではなく
+    #: 答えの読み取りになる（`mask_amounts` の docstring に実測値）。
+    mask_amounts_in_long_text: bool = True
 
     def all_columns(self) -> list[str]:
         cols = [*self.numeric, *self.boolean, *self.categorical]
         if self.text:
             cols.append(self.text)
+        if self.long_text:
+            cols.append(self.long_text)
         return cols
 
     def check(self, df: pd.DataFrame) -> None:
@@ -101,6 +125,8 @@ class TreeModel:
     params: dict = field(default_factory=dict)
 
     def _frame(self, df: pd.DataFrame) -> pd.DataFrame:
+        # 自由記述（long_text）は数値化していないので木には渡さない。
+        # そこを読ませるのが LLM の役目なので、ここで入れると比較が濁る。
         out = (df[self.spec.numeric].astype("float64").copy()
                if self.spec.numeric else pd.DataFrame(index=df.index))
         for c in self.spec.boolean:
@@ -258,6 +284,14 @@ SYSTEM_PROMPT = """\
 - 統計モデル同士が食い違うときは、類似事例の価格帯に近いほうを重く見てください。
 - 証拠から離れた値を出さないでください。統計モデルの予測と類似事例の価格が
   すべて収まる範囲の外に出るなら、その理由を reason に書いてください。
+- 自由記述（出品者が書いた説明文）が付いている場合、そこは**統計モデルが
+  読めていない唯一の情報**です。事故歴・改造・欠陥・付属品・急ぎの売却など、
+  価格を動かす記述があれば拾ってください。ただし宣伝文句（「美車」「お買い得」）は
+  どの出品にも書いてあるので、価格の根拠にしないでください。
+- 自由記述が「…（以下 N 文字を省略）」で終わっている場合、続きは読めていません。
+  読めた範囲だけで判断し、confidence を下げてください。
+- 自由記述の中の「〈金額〉」「〈数値〉」は、**答えの漏れを防ぐために伏せた数字**です。
+  そこに売り値が書かれていた可能性が高いので、推測して埋めようとしないでください。
 
 confidence は「この答えが実際の価格に近い自信」を 0.0〜1.0 で入れてください。
 証拠どうしが食い違うとき、類似事例が査定対象と似ていないときは低くしてください。
@@ -276,13 +310,93 @@ def _format_value(v: Any) -> str:
     return str(v)
 
 
-def _describe_row(row: pd.Series, spec: ColumnSpec, indent: str = "") -> str:
-    """1行を人が読める箇条書きにする。LLM に渡すのはこの形。"""
+#: 金額らしい表記。`$12,345` / `12345 dollars` / `USD 12,345` を拾う
+_MONEY = re.compile(
+    r"(?:[$＄]\s?[\d][\d,.]*)"
+    r"|(?:\b[\d][\d,.]*\s?(?:dollars?|usd|万円|円)\b)",
+    re.IGNORECASE)
+
+#: 単独で現れる 3〜6 桁の整数。価格になりうる桁の数字をまとめて伏せる
+_BARE_NUMBER = re.compile(r"(?<![\w.$])(\d{1,3}(?:,\d{3})+|\d{3,6})(?![\w.])")
+
+#: 伏せない下限・上限。これを外れる数字は価格ではありえないので残す
+_MASK_MIN, _MASK_MAX = 300, 300_000
+
+
+def mask_amounts(text: str) -> str:
+    """自由記述から「正解になりうる数字」を伏せる。
+
+    **なぜ要るか。** 出品テキストには売り値がそのまま書いてある。
+    Craigslist の説明文を実測すると **43% の行に価格と完全一致する数字**があり、
+    **51% に `$` 付きの金額**があった。これを LLM に渡すと、予測しているのではなく
+    **答えを読んでいる**だけになる（実際、伏せずに測ると MAE が 2,336 → 1,546 と
+    40% 改善して見えた。これは実力ではない）。
+
+    これは中古車に限らない。**出品・求人・不動産など、自由記述に価格や条件が
+    書かれるデータでは常に起きる**ので、利用者の心得ではなく製品側で塞ぐ。
+
+    伏せる対象:
+
+    - `$12,345` `12345 dollars` `USD 12,345` `123万円` などの金額表記
+    - 単独で現れる 300〜300,000 の整数（走行距離・年式・在庫番号も巻き込む）
+
+    **走行距離や年式も消えるが、それらは構造化列として別に渡している**ので
+    情報は失われない。逆に「F-150」「911」「Model 3」のような車種の数字は
+    300 未満なので残る。電話番号は桁が大きいので残るが害はない。
+
+    完全ではない（「twelve thousand」のような綴りは抜ける）。
+    **伏字だけに頼らず、`docs/` の測定では必ずリークの有無を確認すること。**
+    """
+    if not text:
+        return text
+
+    def _num(m: re.Match) -> str:
+        raw = m.group(1).replace(",", "")
+        try:
+            v = int(raw)
+        except ValueError:
+            return m.group(0)
+        return "〈数値〉" if _MASK_MIN <= v <= _MASK_MAX else m.group(0)
+
+    return _BARE_NUMBER.sub(_num, _MONEY.sub("〈金額〉", text))
+
+
+def _truncate(text: str, limit: int) -> str:
+    """上限で切り、切ったことを明示する。
+
+    黙って切ると LLM は「そこで文が終わっている」と読んでしまう。
+    切った事実と元の長さを書いておけば、判断材料が欠けていることが伝わる。
+    """
+    if limit <= 0 or len(text) <= limit:
+        return text
+    return f"{text[:limit]}…（以下 {len(text) - limit:,} 文字を省略）"
+
+
+def _describe_row(row: pd.Series, spec: ColumnSpec, indent: str = "",
+                  is_target: bool = True) -> str:
+    """1行を人が読める箇条書きにする。LLM に渡すのはこの形。
+
+    `is_target` で自由記述の扱いが変わる。査定対象には長く載せ、
+    類似事例には既定で載せない（プロンプトの膨張を抑えるため）。
+    """
     lines = []
     for c in [*spec.numeric, *spec.boolean, *spec.categorical]:
         lines.append(f"{indent}- {c}: {_format_value(row.get(c))}")
     if spec.text:
         lines.append(f"{indent}- {spec.text}: {_format_value(row.get(spec.text))}")
+    if spec.long_text:
+        limit = (spec.long_text_chars if is_target
+                 else spec.long_text_example_chars)
+        if limit > 0:
+            raw = row.get(spec.long_text)
+            body = "" if raw is None or (isinstance(raw, float) and np.isnan(raw)) \
+                else str(raw)
+            # 改行を潰す。箇条書きの中に生の改行が混ざると構造が読めなくなる
+            body = " ".join(body.split())
+            if spec.mask_amounts_in_long_text:
+                body = mask_amounts(body)
+            lines.append(f"{indent}- {spec.long_text}: "
+                         f"{_truncate(body, limit) if body else '記載なし'}")
     return "\n".join(lines)
 
 
@@ -332,6 +446,7 @@ class LLMPredictor:
     def __init__(self, target: str, unit: str = "", *,
                  numeric: Sequence[str] = (), boolean: Sequence[str] = (),
                  categorical: Sequence[str] = (), text: str | None = None,
+                 long_text: str | None = None,
                  spec: ColumnSpec | None = None,
                  models: Sequence[BaseModel] | None = None,
                  n_examples: int = 5, neighbour_weight: float = 0.15,
@@ -340,8 +455,9 @@ class LLMPredictor:
                  fallback: str = "best_model") -> None:
         self.target = target
         self.unit = unit
-        self.spec = spec or ColumnSpec(numeric=list(numeric), boolean=list(boolean),
-                                       categorical=list(categorical), text=text)
+        self.spec = spec or ColumnSpec(
+            numeric=list(numeric), boolean=list(boolean),
+            categorical=list(categorical), text=text, long_text=long_text)
         self.n_examples = n_examples
         self.neighbour_weight = neighbour_weight
         self.encoder = encoder
@@ -403,7 +519,8 @@ class LLMPredictor:
         for j, nb in enumerate(neighbours, start=1):
             parts.append(f"### 事例{j}（類似度 {nb['類似度']:.3f}）"
                          f" 実際の価格: {nb['価格']:,.6g}")
-            parts.append(_describe_row(pd.Series(nb["属性"]), self.spec))
+            parts.append(_describe_row(pd.Series(nb["属性"]), self.spec,
+                                       is_target=False))
             parts.append("")
         parts.append(f"この車の価格を{u}で1つ答えてください。")
         return "\n".join(parts)
@@ -544,7 +661,8 @@ class LLMPredictor:
         lines.append("")
         lines.append("参照した類似事例:")
         for rank, nb in enumerate(p.neighbours, start=1):
-            desc = _describe_row(pd.Series(nb["属性"]), self.spec, indent="      ")
+            desc = _describe_row(pd.Series(nb["属性"]), self.spec,
+                                 indent="      ", is_target=False)
             lines.append(f"  {rank}. 価格 {nb['価格']:,.6g}"
                          f"（類似度 {nb['類似度']:.3f}）")
             lines.append(desc)
