@@ -9,12 +9,25 @@ AutoMLエージェントを構成し、AIによってモデル選択、予測、
 
 Python 3.12 を使います（システム標準の 3.9 では動きません）。
 
+Ubuntu（計算ノード）:
+
+```bash
+sudo apt update && sudo apt install -y python3.12-venv fonts-noto-cjk
+python3.12 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+source .venv/bin/activate
+```
+
+macOS:
+
 ```bash
 brew install python@3.12 libomp                        # libomp は xgboost/lightgbm に必要
 /usr/local/opt/python@3.12/bin/python3.12 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 source .venv/bin/activate
 ```
+
+`fonts-noto-cjk` はグラフの日本語表示に必要です（macOS は Hiragino Sans が標準搭載）。
 
 ### 2. データの取得
 

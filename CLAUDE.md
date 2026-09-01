@@ -120,7 +120,14 @@ pandas で本番データを読むときも `nrows=` か `chunksize=` を必ず�
 
 ## 環境
 
-Python 3.12.14（Homebrew）+ venv。**システムの `/usr/bin/python3`（3.9）は使わない。**
+Python 3.12 + venv。**システム標準の Python（macOS の 3.9）は使わない。**
+
+実行環境は2つある。**測定は計算ノードで行う**（`docs/2026-09-01-migration.md`）。
+
+| | 用途 | 備考 |
+|---|---|---|
+| 計算ノード（Ubuntu 24.04 / 16 vCPU / 64GB） | 測定・学習・LLM バッチ・ノートブック | データとキャッシュの正本はここ |
+| 手元の Mac | コード編集、オフライン時の予備 | `results/` に数字を書く実行はしない |
 
 ```bash
 source .venv/bin/activate     # 有効化。以後 python / pip は venv のものになる
@@ -132,10 +139,18 @@ source .venv/bin/activate     # 有効化。以後 python / pip は venv のも�
 未セットアップの環境での構築手順:
 
 ```bash
+# Ubuntu（計算ノード）— libomp 相当は wheel に同梱されているので不要
+sudo apt update && sudo apt install -y python3.12-venv fonts-noto-cjk
+python3.12 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+
+# macOS
 brew install python@3.12 libomp          # libomp は xgboost/lightgbm に必要
 /usr/local/opt/python@3.12/bin/python3.12 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
+
+`fonts-noto-cjk` はグラフの日本語のために要る（下記「ノートブック」参照）。
 
 APIキーは `.env`（git管理外）に置く。雛形は `.env.example`。
 
@@ -199,12 +214,17 @@ parquet の行の並びが変わると測定が再現できなくなる。** Duc
 カーネルは必ず `.venv` のものを使う。ノートブック内では `!pip install` を使わず、
 `requirements.txt` に追記して `pip install -r requirements.txt` する。
 
-グラフに日本語を使う場合は先頭で以下を設定する（未設定だと豆腐□になる）:
+グラフに日本語を使う場合は先頭で以下を呼ぶ（未設定だと豆腐□になる）:
 
 ```python
-plt.rcParams["font.family"] = "Hiragino Sans"
-plt.rcParams["axes.unicode_minus"] = False
+import sys; sys.path.insert(0, str(ROOT / "scripts"))
+from plot_style import use_japanese_font
+use_japanese_font()
 ```
+
+**フォント名を直書きしないこと。** macOS は Hiragino Sans、Ubuntu は Noto Sans CJK JP と
+名前が違うので、決め打ちするともう一方の環境で豆腐になる。
+`scripts/plot_style.py` が実際に入っているフォントを探して選ぶ。
 
 出力込みでコミットしている（結果を共有するため）。差分が読みにくくなってきたら
 `nbstripout` の導入を検討する。

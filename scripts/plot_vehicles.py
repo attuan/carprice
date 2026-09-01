@@ -15,9 +15,9 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from eval_protocol import ROOT, SIENTA, VEHICLES  # noqa: E402
+from plot_style import use_japanese_font  # noqa: E402
 
-plt.rcParams["font.family"] = "Hiragino Sans"
-plt.rcParams["axes.unicode_minus"] = False
+use_japanese_font()
 
 OUT = ROOT / "results"
 RULE = "#4a7fb0"    # 人手のルール
