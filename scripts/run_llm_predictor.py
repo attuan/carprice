@@ -42,27 +42,46 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from eval_protocol import (  # noqa: E402
     EXTRA_CAT, EXTRA_NUM, LEGACY_BOOL, LEGACY_CAT, LEGACY_NUM, N_SPLITS, SEED,
-    SIENTA, TARGET, TEXT_COL, load_dataset,
+    SIENTA, VEHICLES, Dataset, load_dataset,
 )
 from unfold import ColumnSpec, LLMPredictor, TreeModel  # noqa: E402
 from unfold.llm import PRICING, ClaudeClient  # noqa: E402
 
-# 証拠を作る統計モデルに渡す列。run_baselines.py の B（構造化列フル）と同じ。
-# テキストは統計モデルには入れず、LLM 側にだけ渡す。
+# 証拠を作る統計モデルに渡す列。run_baselines*.py の「構造化列フル」と同じ。
+# **テキストは統計モデルには入れず、LLM 側にだけ渡す。**
 # こうすると「テキストを LLM が読めた効果」だけを取り出せる。
-SPEC = ColumnSpec(
-    numeric=LEGACY_NUM + EXTRA_NUM,
-    boolean=LEGACY_BOOL,
-    categorical=LEGACY_CAT + EXTRA_CAT,
-    text=TEXT_COL,
-)
+SPECS: dict[str, ColumnSpec] = {
+    "sienta": ColumnSpec(
+        numeric=LEGACY_NUM + EXTRA_NUM,
+        boolean=LEGACY_BOOL,
+        categorical=LEGACY_CAT + EXTRA_CAT,
+        text="装備テキスト",
+    ),
+    # Craigslist 側は run_baselines_vehicles.py の NUM / CAT / TEXT に揃える。
+    # 説明文（平均2,972文字）は入れない。5事例ぶん貼るとプロンプトが
+    # 桁で膨らみ、費用も比較可能性も壊れるため（PRD §6.3 の指摘）。
+    "vehicles": ColumnSpec(
+        numeric=["車齢", "走行距離_mile"],
+        boolean=[],
+        categorical=["メーカー", "状態", "気筒数", "燃料", "名義状態",
+                     "変速機", "駆動", "サイズ", "ボディ", "色", "州"],
+        text="車種名",
+    ),
+}
+
+DATASETS: dict[str, Dataset] = {"sienta": SIENTA, "vehicles": VEHICLES}
+
+# Craigslist を全 200,374 行で回すと近傍索引の構築が重い。
+# **既存のリーダーボードと同じ 60,000 行**に揃えて比較可能にする
+# （CLAUDE.md「S1・S2 の線は行数とセットで固定する」）。
+SAMPLES: dict[str, int | None] = {"sienta": None, "vehicles": 60_000}
 
 
 def mae(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return float(np.mean(np.abs(np.asarray(y_pred) - np.asarray(y_true))))
 
 
-def build(client: ClaudeClient, n_examples: int,
+def build(client: ClaudeClient, n_examples: int, name: str,
           evidence: str = "all") -> LLMPredictor:
     """機能B を組む。`evidence` で証拠1 に何を並べるかを変える。
 
@@ -75,13 +94,14 @@ def build(client: ClaudeClient, n_examples: int,
     切り分ける。近傍そのものは類似事例として渡り続けるので、
     フューショットの仕組みは変わらない。
     """
+    ds, spec = DATASETS[name], SPECS[name]
     models = None
     if evidence == "trees":
-        models = [TreeModel("LightGBM", SPEC, kind="lgbm"),
-                  TreeModel("XGBoost", SPEC, kind="xgb")]
+        models = [TreeModel("LightGBM", spec, kind="lgbm"),
+                  TreeModel("XGBoost", spec, kind="xgb")]
     elif evidence != "all":
         raise SystemExit(f"--evidence は all か trees です: {evidence}")
-    return LLMPredictor(target=TARGET, unit=SIENTA.unit, spec=SPEC,
+    return LLMPredictor(target=ds.target, unit=ds.unit, spec=spec,
                         n_examples=n_examples, client=client, models=models)
 
 
@@ -89,27 +109,28 @@ def build(client: ClaudeClient, n_examples: int,
 # デモ — 1例つくって挙動を見る
 # ---------------------------------------------------------------------
 
-def run_demo(client: ClaudeClient, n_rows: int, n_examples: int,
+def run_demo(client: ClaudeClient, n_rows: int, n_examples: int, name: str,
              evidence: str = "all") -> None:
-    df = load_dataset()
+    ds, spec = DATASETS[name], SPECS[name]
+    df = load_dataset(dataset=ds, sample=SAMPLES[name])
     rng = np.random.default_rng(SEED)
     idx = rng.permutation(len(df))
     train = df.iloc[idx[n_rows:]].reset_index(drop=True)
     test = df.iloc[idx[:n_rows]].reset_index(drop=True)
 
     print(f"\n訓練 {len(train):,} 行で学習し、{len(test)} 行を予測します。")
-    model = build(client, n_examples, evidence).fit(train)
+    model = build(client, n_examples, name, evidence).fit(train)
     pred = model.predict(test, verbose=True)
-    truth = test[TARGET].to_numpy(dtype=float)
+    truth = test[ds.target].to_numpy(dtype=float)
 
     print("\n" + "=" * 78)
     for i in range(len(test)):
         print(model.explain(i))
-        print(f"  → 実際の価格: {truth[i]:.1f} {SIENTA.unit}"
+        print(f"  → 実際の価格: {truth[i]:,.1f} {ds.unit}"
               f"（誤差 {abs(pred[i] - truth[i]):.1f}）")
         print("-" * 78)
 
-    print(f"\nこの {len(test)} 行の MAE: {mae(truth, pred):.2f} {SIENTA.unit}")
+    print(f"\nこの {len(test)} 行の MAE: {mae(truth, pred):,.2f} {ds.unit}")
     print("\n費用:")
     for k, v in model.cost().items():
         print(f"  {k}: {v}")
@@ -120,8 +141,9 @@ def run_demo(client: ClaudeClient, n_rows: int, n_examples: int,
 # ---------------------------------------------------------------------
 
 def run_eval(client: ClaudeClient, n_eval: int, n_examples: int,
-             dry_run: bool, evidence: str = "all") -> None:
-    df = load_dataset()
+             dry_run: bool, name: str, evidence: str = "all") -> None:
+    ds, spec = DATASETS[name], SPECS[name]
+    df = load_dataset(dataset=ds, sample=SAMPLES[name])
     kf = KFold(n_splits=N_SPLITS, shuffle=True, random_state=SEED)
     rng = np.random.default_rng(SEED)
 
@@ -135,10 +157,10 @@ def run_eval(client: ClaudeClient, n_eval: int, n_examples: int,
         pick = rng.choice(len(test_all), size=min(n_eval, len(test_all)),
                           replace=False)
         test = test_all.iloc[np.sort(pick)].reset_index(drop=True)
-        truth = test[TARGET].to_numpy(dtype=float)
+        truth = test[ds.target].to_numpy(dtype=float)
 
         print(f"\n[fold{fold}] 訓練 {len(train):,} 行 → 採点 {len(test)} 行")
-        model = build(client, n_examples, evidence).fit(train)
+        model = build(client, n_examples, name, evidence).fit(train)
 
         # 統計モデル単体の予測（＝機能B が超えるべき線）
         base = {m.name: np.asarray(m.predict(test), dtype=float)
@@ -150,12 +172,12 @@ def run_eval(client: ClaudeClient, n_eval: int, n_examples: int,
             for i in range(len(test)):
                 nbs = [{"訓練行": int(j), "類似度": float(s),
                         "価格": float(model.index_.y_[j]),
-                        "属性": model.train_.iloc[j][SPEC.all_columns()].to_dict()}
+                        "属性": model.train_.iloc[j][spec.all_columns()].to_dict()}
                        for j, s in zip(idx[i], sim[i])]
                 ev = {k: float(v[i]) for k, v in base.items()}
                 prompt_chars += len(model._build_prompt(test.iloc[i], ev, nbs))
-            for name, p in base.items():
-                print(f"    {name:24} MAE {mae(truth, p):6.2f}")
+            for mname, p in base.items():
+                print(f"    {mname:24} MAE {mae(truth, p):9,.2f}")
             rows.append({"fold": fold, "n": len(test), **{
                 f"MAE_{k}": mae(truth, v) for k, v in base.items()}})
             continue
@@ -169,12 +191,12 @@ def run_eval(client: ClaudeClient, n_eval: int, n_examples: int,
             "confidence": [p.confidence for p in model.predictions_],
             "由来": [p.origin for p in model.predictions_],
             "理由": [p.reason for p in model.predictions_],
-            **{name: v for name, v in base.items()},
+            **{mname: v for mname, v in base.items()},
         }))
 
         rec = {"fold": fold, "n": len(test), "MAE_機能B": mae(truth, pred)}
-        for name, p in base.items():
-            rec[f"MAE_{name}"] = mae(truth, p)
+        for mname, p in base.items():
+            rec[f"MAE_{mname}"] = mae(truth, p)
         rec["LLMが答えた割合"] = float(np.mean(
             [p.origin == "llm" for p in model.predictions_]))
         rec["平均confidence"] = float(np.mean(
@@ -182,28 +204,29 @@ def run_eval(client: ClaudeClient, n_eval: int, n_examples: int,
         rows.append(rec)
         for k, v in rec.items():
             if k.startswith("MAE_"):
-                print(f"    {k[4:]:24} {v:6.2f}")
+                print(f"    {k[4:]:24} {v:9,.2f}")
 
     res = pd.DataFrame(rows)
     print("\n" + "=" * 78)
     print(f"5-fold 平均（各 fold {n_eval} 行 = 合計 {int(res['n'].sum())} 行で採点）")
     print("=" * 78)
     summary = res[[c for c in res.columns if c.startswith("MAE_")]].mean()
-    for name, v in summary.sort_values().items():
-        mark = " ★機能B" if name == "MAE_機能B" else ""
-        print(f"  {name[4:]:26} MAE {v:6.2f} {SIENTA.unit}{mark}")
+    for mname, v in summary.sort_values().items():
+        mark = " ★機能B" if mname == "MAE_機能B" else ""
+        print(f"  {mname[4:]:26} MAE {v:9,.2f} {ds.unit}{mark}")
 
     if not dry_run and "MAE_機能B" in summary:
         best_base = summary.drop("MAE_機能B").min()
         best_name = summary.drop("MAE_機能B").idxmin()[4:]
         diff = best_base - summary["MAE_機能B"]
         verdict = "上回った" if diff > 0 else "届かなかった"
-        print(f"\n  → 証拠にした統計モデルの最良は {best_name}（{best_base:.2f}）。"
-              f"機能B は {abs(diff):.2f} {SIENTA.unit} {verdict}。")
+        print(f"\n  → 証拠にした統計モデルの最良は {best_name}（{best_base:,.2f}）。"
+              f"機能B は {abs(diff):,.2f} {ds.unit} {verdict}。")
         print(f"  → LLM が答えた割合 {res['LLMが答えた割合'].mean():.1%} / "
               f"平均 confidence {res['平均confidence'].mean():.2f}")
 
-    suffix = "" if evidence == "all" else f"_{evidence}"
+    suffix = ("" if name == "sienta" else f"_{name}")
+    suffix += "" if evidence == "all" else f"_{evidence}"
     out = ROOT / "results" / f"llm_predictor{suffix}.csv"
     out.parent.mkdir(exist_ok=True)
     res.to_csv(out, index=False, encoding="utf-8-sig")
@@ -216,8 +239,10 @@ def run_eval(client: ClaudeClient, n_eval: int, n_examples: int,
 
     if dry_run:
         n_rows_total = int(res["n"].sum())
-        # 日本語混じりなので 1トークン≒1.6文字で粗く見る。system は毎回 +約600字
-        tok = (prompt_chars / 1.6) + n_rows_total * 400
+        # 1トークンあたりの文字数はデータの言語で違う（日本語 1.6 / 英語 3.5）。
+        # system は毎回 +約400トークン
+        chars_per_token = 1.6 if name == "sienta" else 3.5
+        tok = (prompt_chars / chars_per_token) + n_rows_total * 400
         pin, pout = PRICING.get(client.model, PRICING["claude-opus-5"])
         est = (tok * pin + n_rows_total * 150 * pout) / 1_000_000
         print(f"\n--- 費用の見積もり（{client.model}）---")
@@ -245,6 +270,9 @@ def main() -> None:
     ap.add_argument("--model", default="claude-opus-5")
     ap.add_argument("--effort", default="low", choices=["low", "medium", "high"])
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--dataset", default="sienta",
+                    choices=["sienta", "vehicles"],
+                    help="sienta=単一車種・日本語 / vehicles=複数車種・英語")
     ap.add_argument("--evidence", default="all", choices=["all", "trees"],
                     help="証拠1 に並べるモデル。trees は近傍中央値を外す")
     ap.add_argument("--dry-run", action="store_true",
@@ -258,15 +286,17 @@ def main() -> None:
         print("（--dry-run なら LLM を呼ばずに費用の見積もりだけできます）")
         raise SystemExit(1)
 
-    print(f"モデル {args.model} / effort {args.effort} / "
-          f"類似事例 {args.n_examples} 件 / 証拠 {args.evidence}"
+    print(f"データ {args.dataset} / モデル {args.model} / "
+          f"effort {args.effort} / 類似事例 {args.n_examples} 件 / "
+          f"証拠 {args.evidence}"
           + ("  [DRY RUN: LLM を呼びません]" if args.dry_run else ""))
 
     if args.demo:
-        run_demo(client, args.demo_rows, args.n_examples, args.evidence)
+        run_demo(client, args.demo_rows, args.n_examples, args.dataset,
+                 args.evidence)
     else:
         run_eval(client, args.n_eval, args.n_examples, args.dry_run,
-                 args.evidence)
+                 args.dataset, args.evidence)
 
 
 if __name__ == "__main__":
