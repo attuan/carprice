@@ -39,7 +39,7 @@ Craigslist の画像URLが全滅していたため P5 を実施不能に変更�
 
 | 領域 | 状態 |
 |---|---|
-| 環境 | Python 3.12 + venv。埋め込み計算用に隔離環境 `.venv-embed` を別建て（torch と numpy 2.x の非互換のため）。TabPFN も同環境に同居（§2.2-f） |
+| 環境 | Python 3.12 + venv。埋め込み計算用に隔離環境 `.venv-embed` を別建て（当初は torch と numpy 2.x の非互換のため。計算ノードへの移行で衝突は解消したが、**主環境に torch が無いこと自体が「unfold が torch 無しで動く」ことの検査**になるので隔離は維持。→ `docs/2026-09-01-embed-env-rebuild.md`）。TabPFN も同環境に同居（§2.2-f） |
 | データ | シエンタ 5,507行（日本語・単一車種）／ Craigslist 200,374行（英語・複数車種）。後者は **42%を占める重複出稿を排除した後**の行数（§2.2-e） |
 | 評価基盤 | `scripts/eval_protocol.py`。全実験がここを通り `results/*.csv` に自動追記される |
 | ベースライン | 2データセットで測定完了。`docs/2026-08-29-baseline.md` |
