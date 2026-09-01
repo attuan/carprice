@@ -38,8 +38,14 @@ if [[ -z "$DRY" ]]; then
   ssh "$HOST" "mkdir -p $REMOTE/sampledata/processed $REMOTE/sampledata/raw"
 fi
 
-# rsync の共通指定。-a で属性を保つ、-z で圧縮、--partial で中断しても続きから
-RS=(rsync -az --partial --info=progress2 -e ssh)
+# rsync の共通指定。-a で属性を保つ。
+# macOS 標準の rsync は openrsync（protocol 29 / "2.6.9 compatible"）で、
+# GNU rsync 3.x の --info や --partial を受け付けない。
+# 両方で動くよう、使うフラグは -a と -e だけに絞る。
+RS=(rsync -a -e ssh)
+if rsync --version 2>&1 | head -1 | grep -q "^rsync  *version 3"; then
+  RS+=(-z --partial --info=progress2)   # GNU rsync 3.x なら進捗と圧縮を使う
+fi
 [[ -n "$DRY" ]] && RS+=(--dry-run)
 
 echo "=== 1/3 LLM キャッシュ（これを失うと課金され直す） ==="
@@ -48,9 +54,16 @@ echo "=== 1/3 LLM キャッシュ（これを失うと課金され直す） ==="
 
 echo
 echo "=== 2/3 学習に使う中間データ（並び順を保つため転送する） ==="
-"${RS[@]}" --include='*_clean.parquet' --include='*_emb_*.parquet' \
-           --include='*_variants.parquet' --exclude='*' \
-           sampledata/processed/ "$HOST:$REMOTE/sampledata/processed/"
+# openrsync は --include/--exclude の重ね掛けが不安定なので、ファイルを直接並べる
+PARQUETS=$(ls sampledata/processed/*_clean.parquet \
+              sampledata/processed/*_emb_*.parquet \
+              sampledata/processed/*_variants.parquet 2>/dev/null)
+if [[ -n "$PARQUETS" ]]; then
+  # shellcheck disable=SC2086
+  "${RS[@]}" $PARQUETS "$HOST:$REMOTE/sampledata/processed/"
+else
+  echo "  対象の parquet がありません"
+fi
 
 echo
 echo "=== 3/3 重複入りの版（再生成できるので任意・324MB） ==="
