@@ -71,6 +71,8 @@ Python ライブラリ `unfold` として設計し直された（→ `dialogs/un
   - `llm.py` — **唯一 Claude API を呼ぶ場所**。ディスクキャッシュ・費用計上・並列実行
 - `tests/` — `unfold` のテスト。`.venv/bin/python -m pytest tests -q`
 - `scripts/` — データ取得・測定などの補助スクリプト
+  - `caafe.py` は比較対象（CAAFE 相当）の実装。**LLM が書いたコードを実行する**ので、
+    自分のデータ・自分の環境でだけ動かすこと
 - `sampledata/` — データ。用途ごとに4つに分かれている（下記）
 
 ## データ
