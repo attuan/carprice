@@ -340,3 +340,13 @@ def test_report_が要約を返す(data):
     m.predict(data.iloc[60:])
     s = m.report()
     assert "LLM に回した:" in s and "費用:" in s
+
+
+def test_explain_の行番号は呼び出し側に揃う(data):
+    """内側の機能B は回した行だけを 0 から数え直すので、そのままでは食い違う。"""
+    m = make(data, client=FakeClient(), escalate_rate=0.25).fit(data.iloc[:60])
+    m.predict(data.iloc[60:])
+    llm_row = int(np.flatnonzero(m.selected_)[1])   # 2番目に回った行
+    s = m.explain(llm_row)
+    assert s.startswith(f"[{llm_row}行目]")
+    assert "行目]" not in s[s.index("\n"):]         # 内側の行番号が残っていない

@@ -30,16 +30,16 @@
 
 | 呼ぶ割合 | 10% | 20% | 30% | 50% | 75% | 100% |
 |---|---|---|---|---|---|---|
-| 食い違い（既定） | 2,929 | 2,875 | 2,767 | 2,608 | **2,479** | 2,363 |
-| 近傍1位の類似度（低い順） | 3,019 | 2,975 | 2,853 | 2,739 | 2,586 | 2,363 |
-| 費用 | $0.52 | $1.03 | $1.55 | $2.58 | $3.88 | $5.17 |
+| MAE（USD） | 2,907 | 2,795 | 2,674 | 2,581 | 2,450 | **2,265** |
+| 費用 | $0.52 | $1.05 | $1.57 | $2.62 | $3.92 | $5.23 |
+| 推定時間（秒） | 61 | 93 | 130 | 199 | 286 | 369 |
 
-（0% = 3,103、LLM を使わない既知最良の比較線 = 2,591）
+（0% = 3,043。9/1 に `scripts/run_adaptive.py` でこのクラス自身が引いた曲線）
 
-**このデータでは全行呼ぶ 2,363 が最も精度が良い。**ルーティングは
+**このデータでは全行呼ぶ 2,265 が最も精度が良い。**ルーティングは
 「精度を上げる仕掛け」ではなく **「精度をいくら落とせば費用がいくら浮くか」を
-選べる仕掛け**である。75% で $3.88 / MAE 2,479 は比較線を下回るので、
-予算が限られているなら全行呼ばずに済む、という読み方をする。
+選べる仕掛け**である。半分だけ呼べば $2.62 で MAE 2,581 となり、
+0% との差の 59% を半額で取れる、という読み方をする。
 
 なお **シエンタ（単一車種）ではどの信号も効かなかった**（`results/routing_signals.csv`）。
 信号が効くかどうかはデータ次第なので、`curve()` で必ず自分のデータで確かめること。
@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import re
 from typing import Callable, Sequence
 
 import numpy as np
@@ -445,7 +446,10 @@ class AdaptivePredictor:
                 f" / 信号 {float(self.signal_[i]):,.6g}"
                 f"（{'上位 %.0f%%' % (self.escalate_rate * 100) if self.escalate_rate is not None else '閾値 %s' % self.threshold} が対象）")
         if i in self._llm_pos:
-            return head + "\n" + self.predictor.explain(self._llm_pos[i])
+            # 内側の機能B は「LLM に回した行だけ」を 0 から数え直しているので、
+            # その行番号をそのまま出すと呼び出し側の行番号と食い違う。頭を落とす
+            body = self.predictor.explain(self._llm_pos[i])
+            return head + "\n" + re.sub(r"^\[\d+行目\]\s*", "", body)
         lines = [head, "",
                  f"予測 {p.value:,.6g} {self.unit}"
                  f"（由来 {p.origin} / confidence {p.confidence:.2f}）",
