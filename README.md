@@ -29,19 +29,33 @@ python scripts/download_data.py
 
 ### 3. APIキー（LLMを使う段階になったら）
 
+`.env` は作成済みです。エディタで開き、`ANTHROPIC_API_KEY=` の右にキーを貼るだけで動きます。
+（clone 直後で `.env` が無い場合は `cp .env.example .env` で作る。`.env` は git 管理外）
+
+```
+ANTHROPIC_API_KEY=sk-ant-api03-...
+```
+
+キーは https://console.anthropic.com/settings/keys で発行します。
+貼ったら疎通確認する（実際に1回だけ Claude を呼びます。費用は $0.001 程度）:
+
 ```bash
-cp .env.example .env           # .env は git 管理外
+.venv/bin/python scripts/check_api_key.py
+.venv/bin/python scripts/check_api_key.py --no-call   # 課金なしで読み込みだけ確認
 ```
 
 ## unfold（ライブラリ本体）
 
-`unfold/` が設計書（`dialogs/unfold-landing.html`）の実装です。
-現在あるのは**機能A（`Feature`）の骨組み**で、LLM 呼び出しなしで動きます。
+`unfold/` が設計書（`dialogs/unfold-landing.html`）の実装です。機能は2つあります。
+
+### 機能A — `Feature`（特徴量生成）
+
+非構造列を、宣言するだけで型のついた列にします。中身は「埋め込み → 近傍で分類」で、
+LLM は確信度が低い行のフォールバックにしか出てきません。
 
 ```python
 from unfold import Feature
 
-# 非構造列（タイトル）から、型のついた列を作る
 df["グレード"] = Feature(
     source="タイトル",
     type="category",
@@ -49,16 +63,43 @@ df["グレード"] = Feature(
 ).fit_transform(df)
 ```
 
-`fit` / `transform` のほかに、設計書どおりの検査 API があります。
+### 機能B — `LLMPredictor`（LLM Predict）
+
+LLM に生データを渡して当てさせるのではなく、**LightGBM・XGBoost・近傍検索に
+先に解かせ、その予測値と「実際の価格が分かっている似た事例」を証拠として渡し、
+最終判断だけさせます**。類似事例は行ごとに引き直します（フューショット）。
 
 ```python
-f.explain(0)        # そのセルの来歴（値・confidence・参照した事例・費用）
-f.confidence()      # 行ごとの確信度
-f.cost()            # LLM に回る行の割合と費用の見積もり
-f.review_queue()    # 確信度が低くレビュー待ちになった行
+from unfold import LLMPredictor
+
+model = LLMPredictor(
+    target="車両本体価格_万円", unit="万円",
+    numeric=["車齢", "走行距離_km"], categorical=["グレード名"],
+    text="装備テキスト",
+)
+pred = model.fit(train_df).predict(test_df)
 ```
 
-測定結果は `docs/2026-08-29-feature-skeleton.md`。テストは次のとおり。
+正解ラベルを別途用意する必要はありません。訓練データの価格がそのまま
+フューショットの例になります。
+
+### 共通 — 来歴（provenance）の検査 API
+
+どちらの機能も、設計書どおり「なぜその値になったか」を辿れます。
+
+```python
+model.explain(0)      # その行の来歴（証拠・参照した事例・LLM の理由）
+model.confidence()    # 行ごとの確信度
+model.examples()      # 推論に使った類似事例
+model.cost()          # かかった費用と1行あたりの単価
+model.provenance()    # 全行の来歴を1つの表に
+```
+
+LLM の応答は `sampledata/processed/llm_cache/` にディスクキャッシュされます。
+**同じ行を2度課金しない**ので、実装をいじって測り直すのは無料です。
+
+測定結果は `docs/` の日付つきファイルにあります。テストは次のとおり
+（LLM 部分は差し替えているので **APIキー無しでも全部通ります**）。
 
 ```bash
 .venv/bin/python -m pytest tests -q

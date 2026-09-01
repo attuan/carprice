@@ -62,7 +62,10 @@ Python ライブラリ `unfold` として設計し直された（→ `dialogs/un
   - `entrysheet.md` — 最初の企画案
   - `2026...ミーティング.md` — 方針が端的にまとまっている。迷ったらまずここ
   - `unfold-landing.html` — 伊藤さんによる設計書
-- `unfold/` — **ライブラリ本体**（機能A の骨組み）。仕様書 `dialogs/unfold-landing.html` の実装
+- `unfold/` — **ライブラリ本体**。仕様書 `dialogs/unfold-landing.html` の実装
+  - `feature.py` — 機能A（`Feature`）。埋め込み → 近傍分類 → 確信度の低い行だけ LLM へ
+  - `predictor.py` — 機能B（`LLMPredictor`）。統計モデルと類似事例を証拠に LLM が最終判断
+  - `llm.py` — **唯一 Claude API を呼ぶ場所**。ディスクキャッシュ・費用計上・並列実行
 - `tests/` — `unfold` のテスト。`.venv/bin/python -m pytest tests -q`
 - `scripts/` — データ取得・測定などの補助スクリプト
 - `sampledata/` — データ。用途ごとに4つに分かれている（下記）
@@ -196,5 +199,14 @@ plt.rcParams["axes.unicode_minus"] = False
   - このルールは `.claude/hooks/block_large_git_add.py` が機械的に強制している。
     `git add` / `git commit` の直前にサイズを検査し、100MB 以上は拒否、25MB 以上は確認を求める。
     閾値は環境変数 `CARPRICE_GIT_DENY_MB` / `CARPRICE_GIT_ASK_MB` で変えられる。
+- APIキー（`.env`）の中身を読まない。読むと値が会話に取り込まれて API に送られ、
+  ローカルの会話ログにも平文で残るため
+  - このルールも機械的に強制している。`permissions.deny` の `Read(./.env)` が Read ツールを、
+    `.claude/hooks/block_env_read.py` が Bash 経由（`cat .env` など）を塞ぐ。
+    `.env.example` の閲覧や `cp .env.example .env` は通る。
+    キーが有効かの確認は `scripts/check_api_key.py`（末尾4文字しか表示しない）を使う。
+  - 判定は保守的で、キーについて**書く**だけの操作（このルールの説明を Bash の
+    ヒアドキュメントで書くなど）も巻き込む。その場合は Edit ツールを使うか、
+    `CARPRICE_ALLOW_ENV_READ=1` を付けて実行する
 - 生成した中間ファイルは `sampledata/processed/` に置く（git 管理外）
 - コミットメッセージは日本語で可
