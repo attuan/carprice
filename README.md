@@ -1,5 +1,109 @@
 # carprice
 
+> **English summary for reviewers.** Everything below this section is in Japanese. This part is a
+> condensed equivalent — enough to install the project, run it, and know where to look while reviewing.
+> The Japanese text is the source of truth; if the two ever disagree, the Japanese wins.
+
+## What this is
+
+An internship project at INDX: automatic used-car price prediction. The deliverable is **`unfold`**, a
+scikit-learn-compatible Python library. Used-car pricing is the flagship use case, not the scope — the
+library itself is written to be domain-generic.
+
+Structured columns (mileage, model year, accident history) do not fully determine a used-car price. The
+remaining signal sits in unstructured data: the listing title, the equipment blurb, the photos. Classical
+regression could only absorb that as dummy variables, which is where accuracy plateaued. `unfold` is the
+attempt to close that gap with an LLM — but with the LLM placed *on top of* statistical models, not in
+place of them.
+
+Two features, plus a routing layer:
+
+- **Feature A — `Feature`** turns an unstructured column into a typed column by declaration alone.
+  Internally it is *embed → nearest-neighbour vote against the labels that already exist → confidence*.
+  The LLM is only the fallback for rows whose confidence is low; it is not asked to write a feature every
+  time.
+- **Feature B — `LLMPredictor`** does not hand the LLM a raw record and ask for a price. LightGBM,
+  XGBoost and a semantic k-NN solve it first; their predictions, plus similar vehicles whose actual price
+  is known (retrieved per row, not pasted once), are passed to the LLM as *evidence*, and the LLM only
+  makes the final call.
+- **Confidence routing — `AdaptivePredictor`** decides *which rows* reach the LLM at all, using only
+  signals available before any LLM call. A single threshold moves continuously between "call for every
+  row" and "never call".
+
+The project's plan changed three times (details in `CLAUDE.md`). An earlier plan — "let the LLM pick the
+model" — **was dropped** at the design-document stage (`dialogs/unfold-landing.html`) and folded into the
+two features above. **When reading older material in this repository, check which stage it belongs to.**
+
+## Quick start — free, no API key, no data download
+
+The 500-row excerpt committed to git is enough. This runs leakage checks → screening → Feature A → cost
+estimation in one go, and **makes no LLM call by default**.
+
+```bash
+.venv/bin/python -m unfold.demo              # free
+.venv/bin/python -m unfold.demo --run 20     # predicts 20 rows (6 go to the LLM; about $0.05)
+.venv/bin/python -m pytest tests -q          # the LLM is stubbed, so tests pass without an API key
+```
+
+## Setup
+
+Python 3.12 and a venv. Do not use the system Python.
+
+```bash
+# Ubuntu (compute node)
+sudo apt update && sudo apt install -y python3.12-venv fonts-noto-cjk
+python3.12 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+
+# macOS
+brew install python@3.12 libomp          # libomp is required by xgboost/lightgbm
+/usr/local/opt/python@3.12/bin/python3.12 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+`fonts-noto-cjk` is only for Japanese labels in plots.
+
+**There are two environments on purpose.** `.venv` (main) holds pandas / LightGBM / XGBoost / `unfold`
+itself; `.venv-embed` (`bash scripts/setup_embed_env.sh`) holds torch / sentence-transformers / TabPFN.
+**`unfold` runs without torch** — the default encoder is character TF-IDF — and torch is kept out of the
+main environment so that an accidental dependency on it cannot pass the tests unnoticed.
+
+Credentials go in `.env` (not tracked; template in `.env.example`). `.venv/bin/python
+scripts/check_api_key.py` verifies it, `--no-call` checks it without spending anything. Reading the
+contents of `.env` is blocked by policy and by hooks. The 1.4 GB raw dataset is not in the repository;
+`python scripts/download_data.py` fetches it from Kaggle.
+
+## What to look at when reviewing
+
+| Path | What it is |
+|---|---|
+| `unfold/feature.py` | Feature A: embedding → neighbour classification → LLM fallback |
+| `unfold/predictor.py` | Feature B: statistical models and retrieved cases as evidence for the LLM |
+| `unfold/adaptive.py` | Confidence routing; `plan()` / `curve()` / `approve()` |
+| `unfold/leakage.py` | Duplicate-record detection, run automatically on fit / predict |
+| `unfold/llm.py` | **The only place that calls the Claude API.** Disk cache, cost accounting, parallelism |
+| `unfold/demo.py` | End-to-end entry point (`python -m unfold.demo`) |
+| `tests/` | `pytest tests -q` |
+| `scripts/` | Data fetching and measurement scripts; `caafe.py` is a CAAFE-equivalent baseline that **executes LLM-written code**, so run it only on your own data and machine |
+
+Three properties are deliberate and worth checking:
+
+- **Leakage.** The same vehicle is cross-posted to several regions in the Craigslist data (42% of rows are
+  duplicates; one VIN appears up to 261 times at an identical price). Keeping them across a random split
+  inflates R² from 0.880 to 0.914, and **the more text you use as a feature, the larger the inflation**.
+  `check_duplicates` / `check_overlap` warn rather than raise, since duplication is sometimes intentional.
+- **Answer leakage in free text.** 43.7% of Craigslist `description` fields state the asking price, so
+  `unfold` **masks monetary amounts by default** before passing long text to the LLM.
+- **Cost and provenance.** LLM responses are cached to disk, so re-measuring after a code change is free.
+  `explain()` / `confidence()` / `examples()` / `cost()` / `provenance()` trace every cell back to
+  human / model / llm origin, the evidence used, and what it cost.
+
+Measured results, design decisions and history live in `docs/` (Japanese), with `docs/README.md` as the
+index — it also explains the `P3` / `S6` / `R2` notation. `docs/PRD.md` carries an English summary at the
+top as well.
+
+---
+
 株式会社INDXのインターンにて作成する中古車価格の自動予測プログラムです。
 
 成果物は **`unfold`** という scikit-learn 互換の Python ライブラリで、機能は2つあります。
@@ -150,9 +254,9 @@ pred = model.fit(train_df).predict(test_df)
 ```python
 from unfold import AdaptivePredictor
 
-model = AdaptivePredictor(target="価格_usd", unit="USD",
-                          numeric=["車齢", "走行距離_mile"],
-                          categorical=["メーカー", "州"], text="車種名",
+model = AdaptivePredictor(target="price", unit="USD",
+                          numeric=["age", "odometer"],
+                          categorical=["manufacturer", "state"], text="model",
                           escalate_rate=0.3)     # 信号の強い上位3割だけ回す
 model.fit(train)
 model.plan(test)      # 呼ぶ前に「何行・いくら・何秒」（LLM を呼ばないので無料）
@@ -163,7 +267,7 @@ model.approve()       # LLM の答えを承認 → 次回はその行を呼ば�
 
 既定の信号は **LightGBM と XGBoost の予測の食い違い**（統計モデル自身が
 迷っている行に回す）で、実測で最良でした。`signal="unseen"` にすると
-訓練データに無い車種名・グレードを含む行を優先します。
+訓練データに無い値（Craigslist なら未知の `model`）を含む行を優先します。
 
 Craigslist の 60 行で上位30%だけ回した実測は
 **MAE 2,767 → 2,476（費用 $0.155）**。詳しくは `docs/2026-09-01-adaptive.md`。
@@ -177,19 +281,19 @@ Craigslist では勝ちました）。**LLM を呼ぶ前に**、そのデータ�
 ```python
 from unfold import screen
 
-print(screen(df, target="価格_usd", text="車種名", unit="USD",
-             numeric=["車齢", "走行距離_mile"], categorical=["メーカー", "州"]))
+print(screen(df, target="price", text="model", unit="USD",
+             numeric=["age", "odometer"], categorical=["manufacturer", "state"]))
 # テキスト寄与率 15.4%（閾値 10%） → 判定: 試す価値あり
 ```
 
 ### 自由記述を渡すときの注意
 
 出品テキストには**売り値がそのまま書いてあることが多い**です
-（Craigslist の説明文は 43.7% の行が該当）。そのまま渡すと予測ではなく
+（Craigslist の `description` は 43.7% の行が該当）。そのまま渡すと予測ではなく
 答えの読み取りになるので、`unfold` は**既定で金額を伏せます**。
 
 ```python
-model = LLMPredictor(..., long_text="説明文")   # 金額は自動で〈金額〉に伏せられる
+model = LLMPredictor(..., long_text="description")  # 金額は自動で〈金額〉に伏せられる
 ```
 
 詳しくは `docs/2026-09-01-description-leak.md`。
@@ -205,7 +309,7 @@ model = LLMPredictor(..., long_text="説明文")   # 金額は自動で〈金額
 ```python
 from unfold import check_duplicates, check_overlap
 
-print(check_duplicates(df, keys=["車台番号"]))   # 1つの表の中の重複
+print(check_duplicates(df, keys=["VIN"]))        # 1つの表の中の重複
 print(check_overlap(train, test))                # train と test にまたがる重複
 ```
 

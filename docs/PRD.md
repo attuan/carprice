@@ -2,6 +2,100 @@
 
 **版**: 0.6(人間がまともに読めないものになっていたため、大幅に書き換え、修正)
 
+（以下は英語話者のレビュアー向けの要約です。日本語の本文はその下から始まります。）
+
+> **English summary for reviewers.** The document below is in Japanese and is the source of truth; this
+> section is a condensed equivalent of it. Version 0.6.
+
+### Why
+
+A used-car price is not determined by the tabular columns alone (mileage, model year, accident history).
+Much of the price-moving information sits in **unstructured data** — the listing title, the equipment
+blurb, the photos. Classical regression could only encode that as dummy variables, which was believed to
+be the accuracy ceiling. That observation is the starting point of the 2026-08-12 meeting.
+
+`unfold` is a Python library that makes such unstructured data usable through a **scikit-learn-compatible
+API** (`fit` / `transform` / `predict`). Used-car pricing is the flagship use case; the library itself is
+designed to be domain-generic.
+
+The plan changed three times — an entry-sheet-stage recommendation app, then three ways of inserting an
+LLM (direct prediction / model selection / feature generation), and finally the current design document
+(`dialogs/unfold-landing.html`) which folded those three into **Feature A (feature generation)** and
+**Feature B (LLM Predict)**. Older material must be read with its stage in mind.
+
+### Scope
+
+**In scope:** `Feature`; `LLMPredictor`; confidence routing (escalate only rows below a confidence
+threshold); provenance (origin, confidence, cited cases and cost per cell, reachable via `explain()`);
+caching so the same row is never billed twice; and the evaluation harness for measuring all of it
+(**already implemented**).
+
+**Out of scope:** LLM-driven model selection (prior work exists, but it was dropped at the design-document
+stage); scraping itself (the data is already at hand); an end-user UI or recommendation ranking (that was
+the entry-sheet-stage idea, not the current one); distributed processing and large-scale workloads (tens
+of thousands of rows is the working target).
+
+### Product goal
+
+For tabular data containing unstructured columns (free text, images), reach prediction accuracy at least
+equal to hand-written preprocessing rules **without writing those rules**, in a form whose **cost and
+provenance can be explained**.
+
+### Feature A — `Feature` (feature generation)
+
+Turn an image or free-text column into a typed column by declaration alone. The pipeline is: use existing
+ground-truth labels as reference points → one vector per record, **caching mandatory** (a row is embedded
+once) → nearest-neighbour search producing a confidence from similarity and label agreement → return the
+label if confident, with no LLM call → otherwise escalate to the LLM and write its answer back as a new
+label candidate.
+
+Output types: `binary` / `category` / `int` / `float` / `ordinal` / `multilabel` / `embedding`. Input may
+be a single column (`source="description"`) or several (`source=["image", "description"]`).
+
+**Narrow down what the LLM is asked to do.** Measured, an embed-then-classify setup only adds **20–45
+USD** worth of improvement over character TF-IDF — too little to justify running embeddings for that
+alone. Where a difference should appear is in **normalising notation itself** (mapping `f-150 raptor`,
+`f150 raptor` and `f 150 raptor` onto the same type), and **that is the LLM's job within Feature A**.
+Implement the split explicitly: embeddings as the substrate for neighbour search, the LLM for unifying
+notation. **Do not commit to a single representation** — embeddings and character TF-IDF are good at
+different things, so using both must be a first-class option (measured best overall at 2,596).
+
+### Feature B — `LLMPredictor`
+
+Rather than handing the LLM a raw record, XGBoost, LightGBM and a semantic k-NN solve it first, and their
+predictions plus similar cases are passed as *evidence* so the LLM only makes the final call.
+
+Requirements: aggregate several statistical models' outputs into what the LLM sees; **retrieve few-shot
+examples per row** rather than pasting one fixed set; and settle how a `predict_proba`-oriented
+classification design applies to used-car prices, which are continuous.
+
+### Feature C? — confidence routing (`AdaptivePredictor`)
+
+A single threshold must move continuously between "send every row to the LLM" and "send none", and moving
+it must make **accuracy, latency and cost visible at the same time**. Rows the LLM answered are queued as
+label candidates; approving them widens the fast path next time (active learning). This is the answer to
+the "make LLM prediction lighter by using a cache" item raised in the 2026-08-12 meeting.
+
+### Provenance and inspection API
+
+`model.explain(X)` returns a cell's origin (human / model / llm), confidence, cited cases and cost;
+`model.confidence(X)` the per-row confidence, visible before committing to a run; `model.examples(X)` the
+cases used for inference; `model.cost(X)` a pre-run cost estimate. Features are versioned together with
+the labels that produced them, so that re-running three months later shows whether the numbers still match
+and which labels changed.
+
+### Non-functional requirements
+
+scikit-learn-compatible API (`fit` / `transform` / `fit_transform` / `predict` / `predict_proba`); the
+embedding model, LLM, statistical models and storage are all swappable by configuration; reproducibility
+is enforced by the library (fixed seeds, fit inside the fold); **leakage prevention** — duplicate-record
+detection (`unfold/leakage.py`), which must at minimum warn, because unstructured text as a feature makes
+duplicates inflate the score; cost — never bill the same row twice, and estimate before running;
+environment — Python ≥ 3.10, with embedding computation allowed to live in an isolated environment to
+avoid dependency conflicts.
+
+Comparison against prior work is in `docs/related-work.md`.
+
 ---
 
 ## なぜ作るのか
