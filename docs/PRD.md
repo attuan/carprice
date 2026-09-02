@@ -207,7 +207,6 @@ model = LLMPredictor(target="resale_band", models=[xgb, lgbm, semantic_knn],
 
 - 複数の統計モデルの出力を集約して LLM に渡すこと
 - 少数事例（few-shot）は**行ごとに検索して差し替える**こと（一度貼って使い回さない）
-- 中古車価格は連続値なので、`predict_proba` 前提の分類設計をどう当てるかの決着が必要
 
 ### 機能C? - 信頼度ルーティング（`AdaptivePredictor`）
 
