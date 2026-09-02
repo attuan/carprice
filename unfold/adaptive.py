@@ -11,9 +11,9 @@
 
     from unfold import AdaptivePredictor
 
-    model = AdaptivePredictor(target="価格_usd", unit="USD",
-                              numeric=["車齢", "走行距離_mile"],
-                              categorical=["メーカー", "州"], text="車種名",
+    model = AdaptivePredictor(target="price", unit="USD",
+                              numeric=["age", "odometer"],
+                              categorical=["manufacturer", "state"], text="model",
                               escalate_rate=0.3)       # 上位3割だけ LLM に回す
     model.plan(test)        # 呼ぶ前に「何行・いくら・何秒」を見る
     pred = model.predict(test)

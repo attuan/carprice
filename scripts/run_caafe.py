@@ -20,7 +20,7 @@
 並べるのは4つ。
 
     A2' 構造化列のみ                    ← 何もしない線
-    B2' ＋車種名を手書きルールで正規化    ← 人手ルールの線
+    B2' ＋model を手書きルールで正規化    ← 人手ルールの線
     F(c)' ＋機能A（埋め込み列）          ← こちらの手法
     CAAFE ＋LLM が書いた特徴量コード      ← 比べたい相手
 
@@ -78,12 +78,12 @@ DESCRIPTION = """\
 アメリカの Craigslist（個人売買の掲示板）に出稿された中古車の一覧です。
 1行が1台で、出品者が入力した項目が並んでいます。目的は車両価格（USD）の予測です。
 
-- `車種名` は出品者が自由に書いた文字列で、表記がまったく揃っていません
+- `model` は出品者が自由に書いた文字列で、表記がまったく揃っていません
   （例: "f-150 xlt supercrew", "f150 lariat 4x4", "silverado 1500 crew cab lt"）。
   メーカー名・グレード・駆動方式・キャブ形状などが混ざって入っています
-- `車齢` は 2021 年基準の経過年数、`走行距離_mile` はマイル
-- 選択式の項目（状態・気筒数・燃料・変速機・駆動・サイズ・ボディ・色・州）は
-  未入力が多く、欠損が3〜6割ある列もあります
+- `age` は 2021 年基準の経過年数、`odometer` は走行距離（マイル）
+- 選択式の項目（condition, cylinders, fuel, title_status, transmission,
+  drive, size, type, paint_color, state）は未入力が多く、欠損が3〜6割ある列もあります
 - 価格帯は $1,000〜$100,000、中央値は $12,000 前後です
 """
 
@@ -170,7 +170,7 @@ def make_score_fn(inner_train_idx: np.ndarray, inner_val_idx: np.ndarray):
 
 
 #: CAAFE に見せる列。**他の手法と完全に同じ**にする。
-#: 特に `説明文` は渡さない。平均 2,972 字あってプロンプトが桁で膨らむうえ、
+#: 特に `description` は渡さない。平均 2,972 字あってプロンプトが桁で膨らむうえ、
 #: 43.7% の行に売り値が書いてあるので、そこから数字を拾うコードを書かれると
 #: 「予測」ではなく「答えの読み取り」になる（docs/2026-09-01-description-leak.md）。
 USED_COLS = list(NUM) + list(BOOL) + list(CAT) + [TEXT]
@@ -204,7 +204,7 @@ def run_caafe_fold(train: pd.DataFrame, test: pd.DataFrame, client: ClaudeClient
         # **train と test をつないでから1回だけ当てる。**
         # 生成コードには `pd.factorize` や `value_counts` のように
         # 「そのフレームの中身」に依存する処理が混ざる。別々に当てると
-        # 同じ車種名に違う番号が付き、test で意味が変わってしまう。
+        # 同じ model に違う番号が付き、test で意味が変わってしまう。
         # ただしこれは test の行を見て統計を取ることでもある（transductive）。
         both = caafe.run_code(pd.concat([train, test], ignore_index=True),
                               result.code)
@@ -236,7 +236,7 @@ def main() -> None:
                          "pd.factorize などの状態を持つ処理が壊れるのを防ぐが、"
                          "test の行を見て統計を取ることにもなる")
     ap.add_argument("--with-description", action="store_true",
-                    help="自由記述（説明文）も CAAFE に見せる。**土俵が変わる**うえ "
+                    help="自由記述（description）も CAAFE に見せる。**土俵が変わる**うえ "
                          "43.7%% の行に売り値が書いてあるのでリークしうる")
     ap.add_argument("--skip-caafe", action="store_true",
                     help="比較線だけ測る（LLM を呼ばない＝無料）")
@@ -274,7 +274,7 @@ def main() -> None:
             t0 = time.time()
             pred, result = run_caafe_fold(
                 train, test, client, args.n_iterations, args.inner_rows,
-                extra_cols=["説明文"] if args.with_description else None,
+                extra_cols=["description"] if args.with_description else None,
                 apply_together=args.apply_together)
             rec["MAE_CAAFE"] = mae(truth, pred)
             rec["CAAFE_採用数"] = result.n_accepted

@@ -5,7 +5,7 @@
 S1 の目標「2,596 未満」も S2 の目標「3,715 未満」も、**8/31 以前の 6 万行**で出した
 値である。ところがそのときの `vehicles_multi_clean.parquet` は書き出し順が
 実行ごとに変わっており、`sample(60_000)` が引く行が今と違う
-（`docs/2026-09-01-adaptive.md`。9/1 に `ORDER BY 物件ID` で固定した）。
+（`docs/2026-09-01-adaptive.md`。9/1 に `ORDER BY id` で固定した）。
 
 **当時の parquet は残っていないので、比較線ごと引き直すしかない。**
 片方だけ新しい分割で測って「勝った」と言うと、分割の当たり外れを
@@ -13,13 +13,13 @@ S1 の目標「2,596 未満」も S2 の目標「3,715 未満」も、**8/31 以
 
 ## 何を並べるか
 
-    C2  文字TF-IDF                      ← S2 の比較線（未知の車種名に強い）
+    C2  文字TF-IDF                      ← S2 の比較線（未知の model に強い）
     D1  e5 埋め込み
     D4  埋め込み＋文字TF-IDF             ← S1 の比較線（従来の最良）
     F   機能A（埋め込み列・既定エンコーダ）  ← 判定したいもの
     F+  機能A ＋文字TF-IDF               ← 機能A 側でも併用したらどうなるか
 
-既知（train に同じ車種名があった行）と未知に分けた MAE も出す。S2 は未知の列で見る。
+既知（train に同じ model があった行）と未知に分けた MAE も出す。S2 は未知の列で見る。
 
 ## 実行
 
@@ -86,7 +86,7 @@ def main() -> None:
     df = load_dataset(dataset=VEHICLES, sample=N_SAMPLE)
     df[RULE_COL] = df[TEXT].map(normalize_model)
     df = attach_embeddings(df)
-    print("  埋め込み: vehicles_emb_model_e5small.parquet を車種名で結合（384次元）")
+    print("  埋め込み: vehicles_emb_model_e5small.parquet を model で結合（384次元）")
 
     runs = [
         ("B2 手書きルール", make_lgbm(TARGET, NUM, BOOL, CAT + [RULE_COL])),
@@ -127,7 +127,7 @@ def main() -> None:
 
     print("\n" + "=" * 78)
     print(f"今の 6 万行・5-fold・seed {SEED}"
-          f"（未知の車種名: {unseen.sum():,} 行 / {len(df):,} = {unseen.mean():.1%}）")
+          f"（未知の model: {unseen.sum():,} 行 / {len(df):,} = {unseen.mean():.1%}）")
     print("=" * 78)
     print(res.to_string(index=False, float_format=lambda v: f"{v:,.2f}"))
 
@@ -157,7 +157,7 @@ def main() -> None:
     s2_line = f.loc["C2 文字TF-IDF", "未知MAE"]
     s2_now = f.loc["F  機能A（埋め込み列）", "未知MAE"]
     s2_plus = f.loc["F+ 機能A+文字TF-IDF", "未知MAE"]
-    print(f"S2（未知の車種名 / 文字TF-IDF 単体を下回るか）")
+    print(f"S2（未知の model / 文字TF-IDF 単体を下回るか）")
     print(f"   C2 {s2_line:,.2f} 対 機能A {s2_now:,.2f}"
           f"（差 {s2_now - s2_line:+,.2f}）→ "
           f"{verdict(s2_now - s2_line, spread)}")

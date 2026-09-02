@@ -2,7 +2,7 @@
 
 ## やり方
 
-**採点した行を「説明文に価格そのものが書いてある行」と「書いていない行」に
+**採点した行を「description に価格そのものが書いてある行」と「書いていない行」に
 分けて MAE を出す。** 片方だけ極端に当たっていたら、予測ではなく読み取りである。
 
 これは中古車に限らず使える一般の手順である。目的変数が漏れていそうな行と
@@ -39,9 +39,9 @@ N_EVAL = 120
 
 # 比較する3構成。ファイル名と表示名。
 CONFIGS = [
-    ("説明文なし", "llm_predictor_vehicles_rows.csv"),
-    ("説明文あり・伏字なし【無効】", "llm_predictor_vehicles_desc2000_LEAKED_rows.csv"),
-    ("説明文あり・伏字あり", "llm_predictor_vehicles_desc2000_rows.csv"),
+    ("description なし", "llm_predictor_vehicles_rows.csv"),
+    ("description あり・伏字なし【無効】", "llm_predictor_vehicles_desc2000_LEAKED_rows.csv"),
+    ("description あり・伏字あり", "llm_predictor_vehicles_desc2000_rows.csv"),
 ]
 
 
@@ -49,7 +49,7 @@ def selected_rows() -> pd.DataFrame:
     """測定と同じ分割・同じ抽出で、採点した600行を復元する。
 
     `run_llm_predictor.run_eval` と同じ seed・同じ手順を踏むこと。
-    ここがずれると別の行の説明文を見ることになる。
+    ここがずれると別の行の description を見ることになる。
     """
     df = load_dataset(verbose=False, dataset=VEHICLES, sample=60_000)
     kf = KFold(n_splits=N_SPLITS, shuffle=True, random_state=SEED)
@@ -63,7 +63,7 @@ def selected_rows() -> pd.DataFrame:
 
 
 def price_is_written(text: str, price: float) -> bool:
-    """説明文に、その車の価格と完全一致する数字が書かれているか。"""
+    """description に、その車の価格と完全一致する数字が書かれているか。"""
     if price <= 0:
         return False
     for n in re.findall(r"[\d][\d,]{2,}", str(text)):
@@ -77,9 +77,9 @@ def price_is_written(text: str, price: float) -> bool:
 
 def main() -> None:
     sel = selected_rows()
-    y = sel["価格_usd"].to_numpy(dtype=float)
-    leak = np.array([price_is_written(t, p) for t, p in zip(sel["説明文"], y)])
-    print(f"採点した {len(y)} 行のうち、説明文に価格そのものが書かれている行: "
+    y = sel["price"].to_numpy(dtype=float)
+    leak = np.array([price_is_written(t, p) for t, p in zip(sel["description"], y)])
+    print(f"採点した {len(y)} 行のうち、description に価格そのものが書かれている行: "
           f"{leak.sum()} 行（{leak.mean():.1%}）\n")
 
     rows = []

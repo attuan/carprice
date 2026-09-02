@@ -18,9 +18,9 @@ Craigslist（複数車種）では有意に勝った。差はデータの性質�
 
     from unfold import screen
 
-    report = screen(df, target="価格_usd", text="車種名",
-                    numeric=["車齢", "走行距離_mile"],
-                    categorical=["メーカー", "州"])
+    report = screen(df, target="price", text="model",
+                    numeric=["age", "odometer"],
+                    categorical=["manufacturer", "state"])
     print(report)
 
 ## 何を測っているのか
@@ -136,7 +136,7 @@ def screen(df: pd.DataFrame, target: str, text: str, *,
         `None` なら全行。
     max_text_chars:
         テキストの先頭何文字を見るか。**文字 n-gram TF-IDF は文章が長いと
-        急激に重くなる**（Craigslist の説明文は平均 2,320 字あり、20,000 行で
+        急激に重くなる**（Craigslist の description は平均 2,320 字あり、20,000 行で
         数分待たされる）。判定に必要なのは「テキストが効くか」の桁だけなので、
         既定で先頭 500 字に切る。`0` なら切らない。
     threshold:

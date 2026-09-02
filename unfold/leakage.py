@@ -39,7 +39,7 @@ def _keys(df: pd.DataFrame, keys: Sequence[str] | None,
     """照合に使う列を決める。既定は「全列一致」。
 
     id や地域のように**同じ車でも値が違う列**は `ignore` で外す。
-    Craigslist なら `ignore=["物件ID", "地域", "州"]` が実態に合う。
+    Craigslist なら `ignore=["id", "region", "state"]` が実態に合う。
     """
     cols = list(keys) if keys else list(df.columns)
     if ignore:
@@ -131,7 +131,7 @@ def check_duplicates(df: pd.DataFrame, keys: Sequence[str] | None = None,
     ----------
     keys:
         照合に使う列。省略すると全列。VIN のような識別子が1列あるなら
-        `keys=["車台番号"]` が最も正確（実測では VIN の重複が最大 261 件）。
+        `keys=["VIN"]` が最も正確（実測では VIN の重複が最大 261 件）。
     ignore:
         照合から外す列。id・地域など**同じ車でも値が違う列**を入れる。
     """

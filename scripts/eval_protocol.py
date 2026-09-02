@@ -17,7 +17,7 @@ CLAUDE.md の「同じ指標で精度を記録する」を機械的に守るた�
 
 - データ    : sampledata/processed/usedsienta_clean.parquet（シエンタ 5,513行）
               sampledata/processed/vehicles_multi_clean.parquet（Craigslist 200,374行）
-- 目的変数  : 車両本体価格_万円 / 価格_usd
+- 目的変数  : 車両本体価格_万円（シエンタ）/ price（Craigslist）
               ※ 支払総額ではない。支払総額には店舗ごとの諸費用が乗っていて、
                  車両そのものの価値以外の分散が混ざるため。
 - 分割      : KFold(n_splits=5, shuffle=True, random_state=42)
@@ -117,7 +117,7 @@ SIENTA = Dataset(
 VEHICLES = Dataset(
     name="Craigslist（複数車種・英語）",
     path=ROOT / "sampledata" / "processed" / "vehicles_multi_clean.parquet",
-    target="価格_usd",
+    target="price",
     leaderboard=ROOT / "results" / "leaderboard_vehicles.csv",
     unit="USD",
 )
@@ -129,7 +129,11 @@ DATA = SIENTA.path
 LEADERBOARD = SIENTA.leaderboard
 TARGET = SIENTA.target
 
-# --- 特徴量の区分 -----------------------------------------------------
+# --- 特徴量の区分（シエンタ）-------------------------------------------
+# 列名は日本語。これはスクレイピング元が日本語のサイトだからで、
+# Craigslist 側とは無関係。両データセットで揃えているのは CV の手続きだけで、
+# 列名も列の構成も揃えない。
+#
 # 「従来手法」の列。スクレイピング当時に回帰分析へ入れていたものと同じ構成。
 # ここが出発点で、これを超えられるかが本プロジェクトの問い。
 LEGACY_NUM = ["車齢", "走行距離_km"]
@@ -155,6 +159,33 @@ TEXT_COL = "装備テキスト"
 #   走行距離_異常・装備記載あり・タイトル切れ疑い・タイトル文字数
 #                                            … クレンジングの品質フラグ。
 #                                               予測に使うのは筋が悪いので外す
+
+
+# --- 特徴量の区分（Craigslist）-----------------------------------------
+# 列名は元データ（Kaggle の vehicles.csv）の英語のまま。各列を採る理由は
+# scripts/clean_vehicles.py の docstring に書いてある。ここでは
+# 「予測に入れる列」と「入れない列」の線引きだけを持つ。
+
+# 出品フォームの数値項目。欠損が無く、価格との関係も単調で、
+# これだけで MAE の大半が決まる。age は year と従属だが、木に
+# 「経過年数」という軸を直接渡したいので数値側に置く。
+VEHICLES_NUM = ["age", "odometer"]
+VEHICLES_BOOL: list[str] = []
+
+# 出品フォームの選択式項目。欠損は 0.4%〜62.8% とばらつくが、
+# LightGBM は欠損のまま食えるうえ、未入力であること自体が情報なので落とさない。
+# state は地域相場を表す最も粗い地理情報。region（404水準）は入れない
+# ——同じ車が複数地域に出稿されているので、相場ではなく個体を当てにいく。
+VEHICLES_CAT = ["manufacturer", "condition", "cylinders", "fuel", "title_status",
+                "transmission", "drive", "size", "type", "paint_color", "state"]
+
+# 本実験の主役。出品者が自由に書いた車種の記述（19,739種類・6割が1回きり）。
+# ここをどう表現するかを比較するのが Craigslist を使う目的。
+VEHICLES_TEXT = "model"
+
+# 自由記述の本文。中央値 1,075 字で、43.7% の行に価格そのものが書かれている。
+# 使うときは必ず金額を伏せる（unfold.predictor の mask）。
+VEHICLES_LONG_TEXT = "description"
 
 
 def load_dataset(verbose: bool = True, dataset: Dataset = DEFAULT,
@@ -215,7 +246,7 @@ def cross_validate(
     kf = KFold(n_splits=N_SPLITS, shuffle=True, random_state=SEED)
     per_fold: list[dict[str, float]] = []
     # oof_out を渡すと out-of-fold 予測を受け取れる。
-    # 「未知の車種名の行だけで MAE を測る」ような事後分析に使う。
+    # 「train に無かった model の行だけで MAE を測る」ような事後分析に使う。
     oof = np.full(len(df), np.nan)
     fold_id = np.zeros(len(df), dtype=int)
 

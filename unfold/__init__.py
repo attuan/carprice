@@ -36,7 +36,7 @@
 
     from unfold import AdaptivePredictor
 
-    model = AdaptivePredictor(target="価格_usd", unit="USD", ...,
+    model = AdaptivePredictor(target="price", unit="USD", ...,
                               escalate_rate=0.3)   # 上位3割だけ LLM に回す
     model.plan(test)      # 呼ぶ前に「何行・いくら・何秒」（LLM を呼ばないので無料）
     model.curve(test)     # 割合を振ったときの精度・費用・レイテンシ

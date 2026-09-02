@@ -44,7 +44,8 @@ from dataclasses import replace  # noqa: E402
 
 from eval_protocol import (  # noqa: E402
     EXTRA_CAT, EXTRA_NUM, LEGACY_BOOL, LEGACY_CAT, LEGACY_NUM, N_SPLITS, SEED,
-    SIENTA, VEHICLES, Dataset, load_dataset,
+    SIENTA, VEHICLES, VEHICLES_BOOL, VEHICLES_CAT, VEHICLES_LONG_TEXT,
+    VEHICLES_NUM, VEHICLES_TEXT, Dataset, load_dataset,
 )
 from features import make_lgbm  # noqa: E402
 from unfold import ColumnSpec, LLMPredictor, TreeModel  # noqa: E402
@@ -60,15 +61,14 @@ SPECS: dict[str, ColumnSpec] = {
         categorical=LEGACY_CAT + EXTRA_CAT,
         text="装備テキスト",
     ),
-    # Craigslist 側は run_baselines_vehicles.py の NUM / CAT / TEXT に揃える。
-    # 説明文（平均2,972文字）は入れない。5事例ぶん貼るとプロンプトが
+    # Craigslist 側は eval_protocol.VEHICLES_* に揃える（他の手法と同じ列）。
+    # description（平均2,972文字）は入れない。5事例ぶん貼るとプロンプトが
     # 桁で膨らみ、費用も比較可能性も壊れるため（PRD「信頼度ルーティング」の指摘）。
     "vehicles": ColumnSpec(
-        numeric=["車齢", "走行距離_mile"],
-        boolean=[],
-        categorical=["メーカー", "状態", "気筒数", "燃料", "名義状態",
-                     "変速機", "駆動", "サイズ", "ボディ", "色", "州"],
-        text="車種名",
+        numeric=VEHICLES_NUM,
+        boolean=VEHICLES_BOOL,
+        categorical=VEHICLES_CAT,
+        text=VEHICLES_TEXT,
     ),
 }
 
@@ -81,7 +81,7 @@ SAMPLES: dict[str, int | None] = {"sienta": None, "vehicles": 60_000}
 
 # 自由記述の本文。--description で使うときだけ ColumnSpec に足す。
 # シエンタ側には自由記述にあたる列が無い（タイトルしか取れていない）。
-LONG_TEXT: dict[str, str | None] = {"sienta": None, "vehicles": "説明文"}
+LONG_TEXT: dict[str, str | None] = {"sienta": None, "vehicles": VEHICLES_LONG_TEXT}
 
 
 def mae(y_true: np.ndarray, y_pred: np.ndarray) -> float:

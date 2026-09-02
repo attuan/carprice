@@ -110,11 +110,11 @@ def ladder(lb: pd.DataFrame) -> None:
     items = [
         ("A1 線形回帰\n構造化列", "A1 線形回帰・構造化列", PLAIN),
         ("A2 LightGBM\n構造化列", "A2 LightGBM・構造化列", PLAIN),
-        ("B1 +車種名\nそのまま", "B1 + 車種名そのまま", RULE),
-        ("B2 +車種名\n手書きルール", "B2 + 車種名を手書きルールで正規化", RULE),
-        ("C1 +車種名\n単語TF-IDF", "C1 + 車種名の単語TF-IDF", RULE),
-        ("C2 +車種名\n文字TF-IDF", "C2 + 車種名の文字TF-IDF", RULE),
-        ("D1 +車種名\n埋め込み", "D1 構造化列+車種名の埋め込み", EMB),
+        ("B1 +model\nそのまま", "B1 + model そのまま", RULE),
+        ("B2 +model\n手書きルール", "B2 + model を手書きルールで正規化", RULE),
+        ("C1 +model\n単語TF-IDF", "C1 + model の単語TF-IDF", RULE),
+        ("C2 +model\n文字TF-IDF", "C2 + model の文字TF-IDF", RULE),
+        ("D1 +model\n埋め込み", "D1 構造化列+model の埋め込み", EMB),
         ("D4 埋め込み\n+文字TF-IDF", "D4 埋め込み+文字TF-IDF", BOTH),
     ]
     labels = [i[0] for i in items]
@@ -144,7 +144,7 @@ def ladder(lb: pd.DataFrame) -> None:
 
 
 def unseen(path: Path) -> None:
-    """訓練データに無かった車種名の行だけを取り出した比較。"""
+    """訓練データに無かった model の行だけを取り出した比較。"""
     d = pd.read_csv(path, encoding="utf-8-sig")
     labels = ["B2 手書きルール", "C2 文字TF-IDF", "D1 埋め込み", "D4 併用"]
     colors = [RULE, RULE, EMB, BOTH]
@@ -152,15 +152,15 @@ def unseen(path: Path) -> None:
     w = 0.38
 
     fig, ax = plt.subplots(figsize=(8.5, 4.6))
-    b1 = ax.bar(x - w / 2, d["既知MAE"], w, color="#c9d6e3", label="既知の車種名")
-    b2 = ax.bar(x + w / 2, d["未知MAE"], w, color=colors, label="未知の車種名")
+    b1 = ax.bar(x - w / 2, d["既知MAE"], w, color="#c9d6e3", label="既知の model")
+    b2 = ax.bar(x + w / 2, d["未知MAE"], w, color=colors, label="未知の model")
     for bars in (b1, b2):
         for b in bars:
             ax.text(b.get_x() + b.get_width() / 2, b.get_height() + 60,
                     f"{b.get_height():,.0f}", ha="center", fontsize=9)
     ax.set_xticks(x, labels)
     ax.set_ylabel("MAE（USD）")
-    ax.set_title("【旧分割】訓練データに無い車種名が来たとき — 手法別の MAE",
+    ax.set_title("【旧分割】訓練データに無い model が来たとき — 手法別の MAE",
                  fontsize=12)
     ax.legend()
     ax.set_ylim(0, d["未知MAE"].max() * 1.22)
@@ -184,8 +184,8 @@ def cross_dataset(v: pd.DataFrame, s: pd.DataFrame) -> None:
          s.loc["D2 従来列+タイトル埋め込み(グレード名なし)", "MAE"]),
         ("Craigslist 60,000件\n（複数車種）",
          v.loc["A2 LightGBM・構造化列", "MAE"],
-         v.loc["B2 + 車種名を手書きルールで正規化", "MAE"],
-         v.loc["D1 構造化列+車種名の埋め込み", "MAE"]),
+         v.loc["B2 + model を手書きルールで正規化", "MAE"],
+         v.loc["D1 構造化列+model の埋め込み", "MAE"]),
     ]
     x = np.arange(len(sets))
     w = 0.35
@@ -228,10 +228,10 @@ def recheck_ladder(lb: pd.DataFrame) -> None:
         ("0 中央値\n（予測しない）", "0  中央値", PLAIN),
         ("A1 線形回帰\n構造化列", "A1 線形回帰・構造化列", PLAIN),
         ("A2 LightGBM\n構造化列", "A2 LightGBM・構造化列", PLAIN),
-        ("B1 +車種名\nそのまま", "B1 + 車種名そのまま", RULE),
-        ("B2 +車種名\n手書きルール", "B2 + 車種名を手書きルールで正規化", RULE),
-        ("C1 +車種名\n単語TF-IDF", "C1 + 車種名の単語TF-IDF", RULE),
-        ("C2 +車種名\n文字TF-IDF", "C2 + 車種名の文字TF-IDF", RULE),
+        ("B1 +model\nそのまま", "B1 + model そのまま", RULE),
+        ("B2 +model\n手書きルール", "B2 + model を手書きルールで正規化", RULE),
+        ("C1 +model\n単語TF-IDF", "C1 + model の単語TF-IDF", RULE),
+        ("C2 +model\n文字TF-IDF", "C2 + model の文字TF-IDF", RULE),
     ]
     missing = [k for _, k, _ in items if k not in lb.index]
     if missing:
@@ -254,7 +254,7 @@ def recheck_ladder(lb: pd.DataFrame) -> None:
                     ha="center", fontsize=9, color=DELTA)
 
     ax.set_ylabel("MAE（USD・5-fold CV）")
-    ax.set_title("車種名をどう扱うか — Craigslist 60,000件 / 価格中央値 $11,995"
+    ax.set_title("model をどう扱うか — Craigslist 60,000件 / 価格中央値 $11,995"
                  "（2026-09-01 測定）", fontsize=12)
     ax.set_ylim(0, vals.max() * 1.2)
     ax.grid(axis="y", alpha=0.3)
@@ -267,7 +267,7 @@ def recheck_ladder(lb: pd.DataFrame) -> None:
 
 
 def recheck_overall(r: pd.DataFrame) -> None:
-    """車種名の扱いを変えた6手法の全体 MAE。
+    """model の扱いを変えた6手法の全体 MAE。
 
     値の幅が 2,577〜2,758 と狭い。0 から棒を描くと全部同じ高さに見え、
     軸を途中から始めると棒の長さが差を偽るので、**点で描いて誤差棒を添える**。
@@ -302,7 +302,7 @@ def recheck_overall(r: pd.DataFrame) -> None:
     ax.set_yticks(y, labels)
     ax.set_ylim(-0.9, len(items) - 0.4)
     ax.set_xlabel("MAE（USD・5-fold CV。誤差棒は fold 間の標準偏差）")
-    ax.set_title("車種名の扱いを変えた比較 — Craigslist 60,000件（2026-09-01 測定）",
+    ax.set_title("model の扱いを変えた比較 — Craigslist 60,000件（2026-09-01 測定）",
                  fontsize=12)
     ax.grid(axis="x", alpha=0.3)
     fig.tight_layout(rect=(0, 0.03, 1, 1))
@@ -313,7 +313,7 @@ def recheck_overall(r: pd.DataFrame) -> None:
 
 
 def recheck_unseen(r: pd.DataFrame) -> None:
-    """訓練データに無かった車種名の行だけを取り出した比較（現分割）。"""
+    """訓練データに無かった model の行だけを取り出した比較（現分割）。"""
     items = [
         ("B2\n手書きルール", "B2 手書きルール", RULE),
         ("C2\n文字TF-IDF", "C2 文字TF-IDF", RULE),
@@ -328,16 +328,16 @@ def recheck_unseen(r: pd.DataFrame) -> None:
     w = 0.38
 
     fig, ax = plt.subplots(figsize=(10, 4.6))
-    b1 = ax.bar(x - w / 2, known, w, color="#c9d6e3", label="既知の車種名")
+    b1 = ax.bar(x - w / 2, known, w, color="#c9d6e3", label="既知の model")
     b2 = ax.bar(x + w / 2, unk, w, color=[i[2] for i in items],
-                label="未知の車種名")
+                label="未知の model")
     for bars in (b1, b2):
         for b in bars:
             ax.text(b.get_x() + b.get_width() / 2, b.get_height() + 50,
                     f"{b.get_height():,.0f}", ha="center", fontsize=9)
     ax.set_xticks(x, [i[0] for i in items], fontsize=9)
     ax.set_ylabel("MAE（USD）")
-    ax.set_title("訓練データに無い車種名が来たとき — 手法別の MAE"
+    ax.set_title("訓練データに無い model が来たとき — 手法別の MAE"
                  "（Craigslist 60,000件・2026-09-01 測定）", fontsize=12)
     ax.legend()
     ax.set_ylim(0, unk.max() * 1.22)

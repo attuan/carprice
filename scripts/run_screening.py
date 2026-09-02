@@ -1,7 +1,7 @@
 """事前スクリーニング（`unfold.screen`）を3つの列に対して回し、CSV に落とす。
 
 **LLM を呼ばないので無料。** ただし文字 n-gram TF-IDF を 20,000 行で回すので
-数分かかる（説明文が特に重い）。結果は `results/screening.csv` に入り、
+数分かかる（Craigslist の description が特に重い）。結果は `results/screening.csv` に入り、
 `notebooks/04_llm_results.ipynb` がそれを読む。
 
 問いは1つ。**そのデータでテキストが価格を説明しているか。**
@@ -25,14 +25,16 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from eval_protocol import SIENTA, VEHICLES, load_dataset  # noqa: E402
+from eval_protocol import (  # noqa: E402
+    SIENTA, VEHICLES, VEHICLES_CAT, VEHICLES_LONG_TEXT, VEHICLES_NUM,
+    VEHICLES_TEXT, load_dataset,
+)
 
 from unfold import screen  # noqa: E402
 
 warnings.filterwarnings("ignore")
 
-VEH_CAT = ["メーカー", "状態", "気筒数", "燃料", "名義状態", "変速機",
-           "駆動", "サイズ", "ボディ", "色", "州"]
+
 
 
 def main() -> None:
@@ -48,10 +50,10 @@ def main() -> None:
     rows.append(("シエンタ", "装備テキスト", r))
 
     v = load_dataset(verbose=False, dataset=VEHICLES, sample=20_000)
-    for i, col in enumerate(["車種名", "説明文"], start=2):
+    for i, col in enumerate([VEHICLES_TEXT, VEHICLES_LONG_TEXT], start=2):
         print(f"[{i}/3] Craigslist・{col}")
-        r = screen(v, target="価格_usd", text=col, unit="USD", sample=None,
-                   numeric=["車齢", "走行距離_mile"], categorical=VEH_CAT)
+        r = screen(v, target=VEHICLES.target, text=col, unit="USD", sample=None,
+                   numeric=VEHICLES_NUM, categorical=VEHICLES_CAT)
         print(r, "\n")
         rows.append(("Craigslist", col, r))
 
