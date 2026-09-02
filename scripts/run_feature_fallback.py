@@ -12,7 +12,7 @@
 > 1行いくらか。**
 
 これが成り立たないなら、信頼度ルーティング（設計書の AdaptivePredictor、
-PRD §6.3）の前提そのものが崩れる。
+PRD「信頼度ルーティング」）の前提そのものが崩れる。
 
 ## 測り方
 
@@ -121,7 +121,7 @@ def main() -> None:
     print(f"\nfold1 のみ / 訓練 {len(train):,} 行 → 採点 {len(test)} 行")
     print(f"宣言した10値がカバーするのは test の {covered:.1%}"
           f"（残りは 116 水準の裾で、正解になりようがない）")
-    print("参照事例は値の名前だけ（PRD §7-1 の案b）。人手ラベルは使わない。\n")
+    print("参照事例は値の名前だけ（PRD 機能A の 01・案b）。人手ラベルは使わない。\n")
 
     rows = [one_rate(train, test, r, client, args.dry_run) for r in RATES]
     res = pd.DataFrame(rows)

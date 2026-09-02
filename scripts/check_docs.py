@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""通しドキュメント4本（PRD / progress-log / related-work / README）の更新漏れを機械的に探す。
+"""通しドキュメント3本（progress-log / related-work / README）の更新漏れを機械的に探す。
 
 「内容が正しいか」は人（または LLM）にしか判定できないが、
 **内容以前のズレ**は文字列の突き合わせで見つかる。ここで見るのはその4つだけ。
 
   A. 本数        docs/README.md と README.md に書いた「NN本」が実ファイル数と合っているか
   B. 索引漏れ    docs/2026-*.md が docs/README.md の表に載っているか（逆に、消えた行がないか）
-  C. 記号        P / S / R 番号の集合が PRD.md・docs/README.md・related-work.md で揃っているか
+  C. 記号        本文で使っている P / S / R が docs/README.md の表に定義されているか
   D. 鮮度        results/ や docs/2026-*.md より通しドキュメントのほうが古いコミットのままでないか
 
 D だけは git の履歴を見る。測定を足したのに progress-log を直していない、が典型的な取りこぼしで、
@@ -30,19 +30,31 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
 
-# 「通し」のドキュメント。日付がつかず、状況が動いたら直す必要があるもの
-STANDING = ["docs/PRD.md", "docs/progress-log.md", "docs/related-work.md",
+# 「通し」のドキュメント。日付がつかず、状況が動いたら直す必要があるもの。
+# docs/PRD.md は入れない。人間が自分の手で書く文書で、更新の頻度も理由も別なので、
+# ここに入れると「PRD だけ直した」ことで鮮度の検査（D）が満足してしまう。
+STANDING = ["docs/progress-log.md", "docs/related-work.md",
             "docs/README.md", "README.md"]
 
 # 通しドキュメントより新しくなっていたら「反映漏れかもしれない」と疑う対象
 SOURCES = ["results/", "unfold/", "scripts/"]
 
-# 記号の定義元。ここに載っている番号が、参照側にも同じだけあるはず
-SYMBOLS = {
-    # PRD の P は取り消し線つき（`~~P5~~【実施不能】`）で出ることがあるので ~ を挟んで許す
-    "P": [("docs/PRD.md", r"P(\d+(?:\.\d+)?)~*【"), ("docs/README.md", r"^\| P(\d+(?:\.\d+)?) \|")],
-    "S": [("docs/PRD.md", r"^\| S(\d) \|"), ("docs/README.md", r"^\| S(\d) \|")],
-    "R": [("docs/related-work.md", r"\bR(\d)\b"), ("docs/README.md", r"^\| R(\d) \|")],
+# 記号（P / S / R）の定義元は docs/README.md の表。日付つきドキュメントが
+# 本文で使っている番号が、そこに定義されているかを見る。
+#
+# 2026-09-01 に PRD を書き換えるまでは PRD が定義元だったが、書き換えで
+# P / S / R の表そのものが PRD から無くなったため、docs/README.md に一本化した。
+# なお旧実装は R の定義元を related-work.md にしていたが、あのファイルに
+# R 番号は1つも出てこないため、この検査は書かれてから一度も動いていなかった。
+SYMBOL_DEFS = {
+    "P": r"^\| P(\d+(?:\.\d+)?) \|",
+    "S": r"^\| S(\d) \|",
+    "R": r"^\| R(\d) \|",
+}
+SYMBOL_USES = {
+    "P": r"\bP(\d+(?:\.\d+)?)\b",
+    "S": r"\bS(\d)\b",
+    "R": r"\bR(\d)\b",
 }
 
 
@@ -97,16 +109,24 @@ def check_index(issues):
 
 
 def check_symbols(issues):
-    """P / S / R 番号の集合が、定義元と参照側で一致しているか。"""
-    for kind, ((src_rel, src_re), (ref_rel, ref_re)) in SYMBOLS.items():
-        src = set(re.findall(src_re, read(src_rel), re.MULTILINE))
-        ref = set(re.findall(ref_re, read(ref_rel), re.MULTILINE))
-        if not src or not ref:
-            continue  # 片方が拾えないときは書式が変わったとき。誤検知を出さない
-        for n in sorted(ref - src):
-            issues.append(f"{ref_rel}: {kind}{n} を参照しているが、{src_rel} に定義がない")
-        for n in sorted(src - ref):
-            issues.append(f"{ref_rel}: {src_rel} にある {kind}{n} が一覧に出てこない")
+    """本文で使っている P / S / R が docs/README.md の表に定義されているか。
+
+    逆（定義したが誰も使っていない）は指摘しない。番号を先に決めてから
+    後で測るのが通常の順序なので、未使用は正常な状態でありうる。
+    """
+    index = read("docs/README.md")
+    users = ["docs/progress-log.md"] + [f"docs/{n}" for n in dated_docs()]
+    for kind, def_re in SYMBOL_DEFS.items():
+        defined = set(re.findall(def_re, index, re.MULTILINE))
+        if not defined:
+            issues.append(f"docs/README.md: {kind} の定義表が見つからない"
+                          "（書式を変えたなら check_docs.py の SYMBOL_DEFS も直す）")
+            continue
+        for rel in users:
+            used = set(re.findall(SYMBOL_USES[kind], read(rel)))
+            for n in sorted(used - defined):
+                issues.append(f"{rel}: {kind}{n} を使っているが、"
+                              "docs/README.md に定義がない")
 
 
 def check_freshness(issues):
@@ -156,7 +176,7 @@ def main():
                 print(f"  - {m}")
             print("\n直すときは /update-docs を使う（判断が要る書き換えはスキル側の手順に従う）。")
         else:
-            print("通しドキュメント4本に、機械的に見つかるズレはない。")
+            print("通しドキュメントに、機械的に見つかるズレはない。")
     return 1 if issues else 0
 
 

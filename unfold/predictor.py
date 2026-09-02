@@ -10,8 +10,8 @@ LLM には最終判断だけさせる。8/31 のミーティングで伊藤さ�
 > 「こんな感じで」予測する。
 
 つまり **教師ラベルを別途作る必要はない**。訓練データの正解価格が
-そのままフューショット（few-shot）の例になる。これで PRD §7-1 は解決し、
-§7-4（分類か回帰か）も回帰に決まった。
+そのままフューショット（few-shot）の例になる。これで「教師ラベルをどう作るか」は解決し、
+「分類か回帰か」も回帰に決まった（どちらも 8/31 ミーティング）。
 
     from unfold import LLMPredictor
 
@@ -22,7 +22,7 @@ LLM には最終判断だけさせる。8/31 のミーティングで伊藤さ�
     model.explain(0)      # その1行がなぜその値になったか
     model.cost()          # かかった費用
 
-証拠の作り方は実測に従っている（PRD §2.2-g）。**近傍を意味的類似度だけで
+証拠の作り方は実測に従っている（`docs/2026-08-29-denoise.md`）。**近傍を意味的類似度だけで
 選ぶと価格の近さを拾わない**（MAE 31.45）ため、距離に数値列の差を混ぜる
 （18.19）。ここは再検討せず、測って決まった recipe をそのまま使う。
 """
@@ -77,7 +77,7 @@ class ColumnSpec:
       査定対象と類似事例で別々に上限を切る。既定では類似事例には載せない
       （`long_text_example_chars=0`）。
 
-    この分離が PRD §6.3 の「長い自由記述はそのままでは扱えない」への回答にあたる。
+    この分離が PRD 信頼度ルーティングの「長い自由記述はそのままでは扱えない」への回答にあたる。
     """
 
     numeric: list[str] = field(default_factory=list)
@@ -117,7 +117,7 @@ class TreeModel:
 
     **カテゴリの水準は fit のとき train だけで決める。** test にしか無い
     水準（train に無かったグレード名）は欠損として扱い、木は欠損の枝に流す。
-    これを破ると「未知の車種名」の評価（PRD §2.2-j）が成り立たなくなる。
+    これを破ると「未知の車種名」の評価（`docs/2026-08-29-feature-unseen.md`）が成り立たなくなる。
     """
 
     name: str
@@ -168,7 +168,7 @@ class NeighbourIndex:
     """「実際の価格が分かっている似た車」を引く索引。
 
     類似度 = テキストのコサイン類似度 − w × 数値列の標準化距離の平均。
-    引き算しているのは PRD §2.2-g の実測結果に従ったもので、意味だけで
+    引き算しているのは `docs/2026-08-29-denoise.md` の実測結果に従ったもので、意味だけで
     選ぶと年式も走行距離も違う車が「似ている」と出てくるため。
 
     w の既定 0.15 は `scripts/run_denoise.py` で測った値。
@@ -408,7 +408,7 @@ def _describe_row(row: pd.Series, spec: ColumnSpec, indent: str = "",
 
 @dataclass
 class Prediction:
-    """1行ぶんの予測と、その来歴（PRD §6.4）。"""
+    """1行ぶんの予測と、その来歴（PRD「来歴（provenance）と検査 API」）。"""
 
     value: float
     confidence: float
@@ -468,7 +468,7 @@ class LLMPredictor:
         if fallback not in ("best_model", "error"):
             raise UnfoldError('fallback は "best_model" か "error" です')
         self.fallback = fallback
-        #: 重複レコードを検知して警告するか（PRD §6.5）。
+        #: 重複レコードを検知して警告するか（PRD「非機能要件」のリーク防止）。
         #: **テキストを特徴量にするほど重複の水増しが大きくなる**ので既定で入れる
         self.check_leakage = check_leakage
 
@@ -479,7 +479,7 @@ class LLMPredictor:
         """訓練データを覚える。**ここで正解ラベルを別途作る必要はない。**
 
         `y` を省略すると `X[target]` を使う。訓練データの正解価格が
-        そのままフューショットの例になる（PRD §7-1 の決着）。
+        そのままフューショットの例になる（8/31 ミーティングでの決着）。
         """
         self.spec.check(X)
         if y is None:
@@ -602,7 +602,7 @@ class LLMPredictor:
         self.last_X_ = X
         return out
 
-    # --- 検査 API（PRD §6.4）------------------------------------------
+    # --- 検査 API（PRD「来歴（provenance）と検査 API」）----------------
 
     def _require(self, X: pd.DataFrame | None = None) -> list[Prediction]:
         """直近の predict の結果を返す。X を渡したら取り違えを検知する。

@@ -9,7 +9,7 @@
 2. **呼ばなかった行は統計モデルの予測がそのまま出ること。** 黙って別の値に
    すり替わると、ルーティングの精度曲線が測れない
 3. **承認した行は次回呼ばれないこと**（設計書 05 の能動学習）
-4. **来歴が経路つきで残ること**（PRD §6.4）
+4. **来歴が経路つきで残ること**（PRD「来歴（provenance）と検査 API」）
 
 実行: .venv/bin/python -m pytest tests -q
 """
@@ -249,7 +249,7 @@ def test_一部だけ承認できる(data):
     assert len(client.prompts) == 10 + 7      # 承認した3行だけ減る
 
 
-# --- 来歴（PRD §6.4）--------------------------------------------------
+# --- 来歴（PRD「来歴（provenance）と検査 API」）------------------------
 
 def test_provenance_に経路と信号が入る(data):
     m = make(data, client=FakeClient(), escalate_rate=0.25).fit(data.iloc[:60])

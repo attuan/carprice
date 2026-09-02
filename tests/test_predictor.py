@@ -126,7 +126,7 @@ def test_類似事例は訓練データからだけ引かれる(data):
     assert ex["訓練行"].max() < 40
 
 
-# --- 来歴（PRD §6.4）--------------------------------------------------
+# --- 来歴（PRD「来歴（provenance）と検査 API」）------------------------
 
 def test_explain_が証拠を辿れる(data):
     m = make(data, client=FakeClient()).fit(data.iloc[:40])
@@ -216,7 +216,7 @@ def test_同じプロンプトは2度課金されない(tmp_path, data):
     assert client2.usage.cost == 0.0
 
 
-# --- 近傍検索の recipe（PRD §2.2-g）-----------------------------------
+# --- 近傍検索の recipe（docs/2026-08-29-denoise.md）--------------------
 
 def test_数値距離を混ぜると近傍の車齢が近づく(data):
     """意味的類似度だけだと年式も走行距離も違う車が「似ている」と出てくる。"""
@@ -359,7 +359,7 @@ def test_伏字は車種の数字を残す():
 
 
 def test_自由記述は査定対象にだけ載り事例には載らない(data):
-    """5事例ぶん貼るとプロンプトが桁で膨らむ（PRD §6.3）。"""
+    """5事例ぶん貼るとプロンプトが桁で膨らむ（PRD「信頼度ルーティング」）。"""
     d = data.assign(説明文=[f"この車は良好です 走行{i}00 マイル" for i in range(len(data))])
     client = FakeClient()
     m = LLMPredictor(target="価格", unit="万円", numeric=["車齢"],

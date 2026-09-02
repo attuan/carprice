@@ -14,23 +14,13 @@
 並べていましたが、伊藤さんの設計書（`dialogs/unfold-landing.html`）の段階で**その案は消え**、
 上の2機能に統合されています。**古い資料を読むときはどの時点のものかに注意してください。**
 
-## ドキュメント
-
-測定結果・設計判断・経緯はすべて `docs/` にあります（22本）。
-**`docs/README.md` が入口**で、どれから読むかと、本文に出てくる
-`P3` `S6` `R2` といった記号の意味をまとめてあります。
-
-- **結果だけ知りたい** → `docs/progress-log.md` 第2部
-- **経緯を追いたい** → `docs/progress-log.md` 第1部
-- **なぜそう作ったのか** → `docs/PRD.md`
-
 ---
 
 ## セットアップ
 
 ### 1. Python環境
 
-Python 3.12 を使います（システム標準の 3.9 では動きません）。
+Python 3.12 を使います。
 
 Ubuntu（計算ノード）:
 
@@ -81,7 +71,7 @@ python scripts/download_data.py
 
 取得せずに動作確認だけしたい場合は `sampledata/sample/` の抜粋データが使えます。
 
-### 3. APIキー（LLMを使う段階になったら）
+### 3. APIキー
 
 `.env` は作成済みです。エディタで開き、`ANTHROPIC_API_KEY=` の右にキーを貼るだけで動きます。
 （clone 直後で `.env` が無い場合は `cp .env.example .env` で作る。`.env` は git 管理外）
@@ -244,30 +234,17 @@ LLM の応答は `sampledata/processed/llm_cache/` にディスクキャッシ�
 .venv/bin/python -m pytest tests -q
 ```
 
-## 分析の始め方
+以下開発用
 
-```bash
-source .venv/bin/activate
-jupyter lab                    # ブラウザで開く（Colab に近い操作感）
-```
+## ドキュメント
 
-VS Code で `notebooks/01_explore_vehicles.ipynb` を直接開いても同じことができます。
-その場合は右上の「カーネルの選択」で `.venv` を選んでください。
+測定結果・設計判断・経緯はすべて `docs/` にあります（23本）。
+**`docs/README.md` が入口**で、どれから読むかと、本文に出てくる
+`P3` `S6` `R2` といった記号の意味をまとめてあります。
+基本、バイブコーディングを行う上でのメモ置き場になってしまっているので、人間が読むには適さないものが多いです。
 
-`notebooks/01_explore_vehicles.ipynb` が出発点です。
-上から順に実行すると、vehicles.csv の全体像の確認から
-`sampledata/processed/vehicles_clean.parquet`（380,907行）の生成までが一通り走ります。
-
-**中間データが2つあるので、取り違えないでください。**
-
-| ファイル | 行数 | 列名 | 重複排除 | 用途 |
-|---|---:|---|---|---|
-| `vehicles_clean.parquet` | 380,907 | 英語（元のまま） | **していない** | ノートブックでの探索用 |
-| `vehicles_multi_clean.parquet` | 200,374 | 日本語 | **済み**（1台1行） | **測定はすべてこちら** |
-
-**精度を測るときは必ず `vehicles_multi_clean.parquet`**（`scripts/clean_vehicles.py` が生成）を使います。
-同じ車が複数の地域に重複出稿されているため、重複を残したまま交差検証すると
-train と test に同じ車が入り、成績が良く見えてしまいます。
+- **結果だけ知りたい** → `docs/progress-log.md` 
+- **なぜそう作ったのか** → `docs/PRD.md`
 
 ## dialogsについて
 
@@ -275,6 +252,8 @@ train と test に同じ車が入り、成績が良く見えてしまいます�
 `entrysheet.md` はこのインターンに参加するにあたって最初のアイデアがまとめられてあります。
 `20260812中古車...` はAI作成の議事録で、方針が端的にまとまってあります。
 `unfold-landing.html` は伊藤さんによるアイデアをまとめた設計書の一つになります。
+
+
 
 ## sampledataについて
 

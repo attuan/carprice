@@ -1,6 +1,6 @@
 """CAAFE 相当の実装 — 「LLM に特徴量生成コードを書かせる」側の比較対象。
 
-PRD §7-6 / R2。CAAFE（Context-Aware Automated Feature Engineering,
+R2 の比較対象（`docs/2026-09-01-caafe.md`）。CAAFE（Context-Aware Automated Feature Engineering,
 NeurIPS 2023, Hollmann et al. https://arxiv.org/abs/2305.03403）は、
 **データセットの説明と列の様子を LLM に見せ、pandas のコードを書かせて
 特徴量を足す**手法である。14 データセット中 11 で改善したと報告されている。

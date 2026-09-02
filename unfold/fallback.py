@@ -1,8 +1,8 @@
 """confidence が低い行の逃がし先（設計書 05「Uncertain? Escalate to the LLM.」）。
 
-**ここが唯一 LLM を呼ぶ場所**であり、2026-08-29 時点ではまだ呼べない
-（APIキーの入手経路が未確定。PRD §7-9）。そこで差し込み口だけ定義し、
-既定は「答えずにレビュー待ちとして積むだけ」の `QueueOnlyFallback` にしてある。
+**既定は「答えずにレビュー待ちとして積むだけ」の `QueueOnlyFallback`** で、
+LLM を呼ぶのは `ClaudeFallback` を明示的に渡したときだけ。
+呼ばない側を既定にしてあるのは、費用が発生する処理を暗黙に走らせないため。
 
 これは手抜きではなく、設計書の能動学習ループの片側そのものでもある。
 仕様書には "Everything the fallback answers is queued as a labeling candidate.

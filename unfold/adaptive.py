@@ -1,4 +1,4 @@
-"""信頼度ルーティング — `AdaptivePredictor`（設計書の Capability C / PRD §6.3）。
+"""信頼度ルーティング — `AdaptivePredictor`（設計書の Capability C / PRD「信頼度ルーティング」）。
 
 **全行を LLM に投げる必要はない。** 機能B（`LLMPredictor`）は1行ごとに LLM を
 呼ぶので、行数がそのまま費用と時間になる。実測値を Craigslist 6万行に当てると
@@ -112,7 +112,7 @@ class AdaptivePredictor:
         "disagreement"（既定・実測で最良）… 木モデル同士の予測の開き。
         "similarity" … 近傍1位の類似度が低い行（証拠そのものが弱い行）。
         "unseen" … 訓練データに無いカテゴリ水準・未知語を含む行。
-        新車種・新グレードが絶えず入る運用を想定した信号（PRD §6.3）。
+        新車種・新グレードが絶えず入る運用を想定した信号（PRD「信頼度ルーティング」）。
         自作するときは `f(X, evidence) -> 配列` を渡す。**大きいほど LLM に回す**向きで返すこと。
     predictor : LLMPredictor | None
         包む対象。省略すると上の引数から組み立てる。
@@ -260,7 +260,7 @@ class AdaptivePredictor:
         cols = [c for c in self.spec.all_columns() if c in X.columns]
         return [_row_key(X.iloc[i], cols) for i in range(len(X))]
 
-    # --- 実行前の見積もり（PRD §6.4「実行を確定する前に見られること」）----
+    # --- 実行前の見積もり（PRD 来歴「実行を確定する前に見られること」）----
 
     def _unit_cost(self) -> float:
         """1行あたりの費用。実績があればそれを、無ければ実測の既定値を使う。"""
@@ -372,7 +372,7 @@ class AdaptivePredictor:
         self.last_X_ = X
         return out
 
-    # --- 検査 API（PRD §6.4）-------------------------------------------
+    # --- 検査 API（PRD「来歴（provenance）と検査 API」）-----------------
 
     def _require(self, X: pd.DataFrame | None = None) -> list[Prediction]:
         if getattr(self, "predictions_", None) is None:
@@ -509,7 +509,7 @@ class AdaptivePredictor:
             n += 1
         return n
 
-    # --- 閾値を振る（PRD §6.3「精度・レイテンシ・費用が同時に見える」）----
+    # --- 閾値を振る（PRD 信頼度ルーティング「3つが同時に見える」）--------
 
     def curve(self, X: pd.DataFrame, y: pd.Series | np.ndarray | None = None,
               rates: Sequence[float] = (0.0, 0.1, 0.2, 0.3, 0.5, 0.75, 1.0),

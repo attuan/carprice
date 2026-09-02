@@ -1,7 +1,7 @@
 """P3 — 機能B（LLMPredictor）を実測する。
 
 問いは1つだけ。**証拠として渡した統計モデル単体より、LLM の最終判断は良いか。**
-良くなければ機能B は価値を出していない（PRD §6.2 の受け入れ基準 S6）。
+良くなければ機能B は価値を出していない（PRD「機能B」/ 受け入れ基準 S6）。
 
 ## なぜ普通の 5-fold CV をそのまま使わないか
 
@@ -62,7 +62,7 @@ SPECS: dict[str, ColumnSpec] = {
     ),
     # Craigslist 側は run_baselines_vehicles.py の NUM / CAT / TEXT に揃える。
     # 説明文（平均2,972文字）は入れない。5事例ぶん貼るとプロンプトが
-    # 桁で膨らみ、費用も比較可能性も壊れるため（PRD §6.3 の指摘）。
+    # 桁で膨らみ、費用も比較可能性も壊れるため（PRD「信頼度ルーティング」の指摘）。
     "vehicles": ColumnSpec(
         numeric=["車齢", "走行距離_mile"],
         boolean=[],

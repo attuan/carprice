@@ -29,8 +29,10 @@ try:
 except Exception:  # 解析部品が読めないなら黙って通す
     sys.exit(0)
 
-# 状況が動いたら書き直す必要がある「通し」のドキュメント
-STANDING = {"docs/PRD.md", "docs/progress-log.md", "docs/related-work.md",
+# 状況が動いたら書き直す必要がある「通し」のドキュメント。
+# docs/PRD.md は入れない。人間が自分の手で書く文書なので、
+# 「PRD を直したから測定の反映も済んでいる」とは言えない。
+STANDING = {"docs/progress-log.md", "docs/related-work.md",
             "docs/README.md", "README.md"}
 
 # これらが動いたなら、通しドキュメントのどこかに反映されるはず
@@ -85,7 +87,7 @@ def main():
     listed = "、".join(sources[:5]) + (" ほか" if len(sources) > 5 else "")
     reason = (
         f"測定・実装だけをコミットしようとしている（{listed}）。\n"
-        "通しドキュメント（docs/progress-log.md・docs/PRD.md・docs/related-work.md・"
+        "通しドキュメント（docs/progress-log.md・docs/related-work.md・"
         "README.md）は1本も含まれていない。\n"
         "反映が要るなら /update-docs で先に直す。要らない（作業途中・記録は後でまとめる）なら"
         "このまま進めてよい。"

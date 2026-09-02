@@ -77,10 +77,10 @@ Python ライブラリ `unfold` として設計し直された（→ `dialogs/un
 - `scripts/` — データ取得・測定などの補助スクリプト
   - `caafe.py` は比較対象（CAAFE 相当）の実装。**LLM が書いたコードを実行する**ので、
     自分のデータ・自分の環境でだけ動かすこと
-  - `check_docs.py` は通しドキュメント（PRD・progress-log・related-work・README）の
+  - `check_docs.py` は通しドキュメント（progress-log・related-work・README）の
     更新漏れを機械的に探す。本数・索引漏れ・P/S/R の不整合と、素材だけが動いたコミットを見る
 - `sampledata/` — データ。用途ごとに4つに分かれている（下記）
-
+- `docs/` -資料置き場。`PRD.md`は編集しないこと。他資料は編集して良いが、基本的にREADMEにのっとり、これ以上通しドキュメントをつくらないこと。(人間が追えなくなる)
 ## データ
 
 置き場所のルールはこの4つ。新しいデータを足すときは必ずどれかに分類する。
@@ -252,7 +252,7 @@ use_japanese_font()
     ヒアドキュメントで書くなど）も巻き込む。その場合は Edit ツールを使うか、
     `CARPRICE_ALLOW_ENV_READ=1` を付けて実行する
 - 生成した中間ファイルは `sampledata/processed/` に置く（git 管理外）
-- 作業が一段落したら通しドキュメント（`docs/PRD.md`・`docs/progress-log.md`・
+- 作業が一段落したら通しドキュメント（`docs/progress-log.md`・
   `docs/related-work.md`・`README.md`・`docs/README.md`）を現状に合わせる。手順は
   `/update-docs`（`.claude/skills/update-docs/`）にある
   - `.claude/hooks/check_docs_updated.py` が `git commit` の直前に見ていて、
